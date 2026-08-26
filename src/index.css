@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,700;0,900;1,400;1,700;1,900&family=Inter:wght@400;500;600;800&display=swap');
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css");
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #040404;
+  --color-bg-secondary: #111111;
+  --color-bg-card: rgba(255, 255, 255, 0.05); /* map bg-white/5 */
+  --color-text-primary: #ffffff;
+  --color-text-muted: rgba(255, 255, 255, 0.6); /* map white/60 */
+  --color-text-inverted: #000000;
+  --color-accent: #CCFF00;
+  --color-accent-dark: #99CC00;
+  --color-divider: rgba(255, 255, 255, 0.1); /* map white/10 */
+
+  --font-display: "Montserrat", "Pretendard", sans-serif;
+  --font-sans: "Inter", "Pretendard", sans-serif;
+}
+
+body {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+
+/* Outline Text Effect */
+.outline-text {
+  -webkit-text-stroke: 2px var(--color-text-primary);
+  color: transparent;
+  background: linear-gradient(to right, var(--color-text-primary) 50%, transparent 50%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  background-position: 100% 0;
+  transition: background-position 1.2s ease;
+}
+.outline-text.in-view {
+  background-position: 0 0;
+}
+
+/* Lenis Recommended */
+html.lenis, html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

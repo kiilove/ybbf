@@ -1,0 +1,31 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ybbf-auth-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-05",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "dev": {
+    "port": 4200,
+    "ip": "localhost"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ybbf_db",
+      "database_id": "b04f3fdc-06ee-4e9f-b1b8-af0fad6f45a0",
+      "preview_database_id": "b04f3fdc-06ee-4e9f-b1b8-af0fad6f45a0"
+    }
+  ]
+  ,
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "b74bfbf62baa4dbba1f0b1befa3f333d",
+      "preview_id": "b74bfbf62baa4dbba1f0b1befa3f333d"
+    }
+  ]
+}

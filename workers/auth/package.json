@@ -1,0 +1,19 @@
+{
+  "name": "ybbf-auth-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 4200 --remote",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "@types/node": "^25.9.1",
+    "typescript": "^5.8.2",
+    "wrangler": "^4.95.0"
+  }
+}

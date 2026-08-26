@@ -1,0 +1,329 @@
+import { doc, updateDoc, deleteDoc, setDoc, collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from './firebase';
+
+export interface JoinItem {
+  contestCategoryId: string;
+  contestCategoryTitle: string;
+  contestGradeId: string;
+  contestGradeTitle: string;
+}
+
+export interface Registration {
+  id: string;
+  playerUid: string;
+  playerName: string;
+  playerGender: 'm' | 'f';
+  playerBirth: string;
+  playerTel: string;
+  playerEmail?: string;
+  playerGym: string;
+  playerText?: string;
+  playerPhotoUrl?: string;
+  playerPhotoUrls?: string[];
+  playerPhotoUrlsJson?: string;
+  selectedPhotoUrls?: string[];
+  selectedPhotoUrlsJson?: string;
+  playerService: boolean;
+  joins: JoinItem[];
+  contestPriceSum: number;
+  contestPriceTotal: number;
+  playerAge?: number | null;
+  isPriceCheck: boolean;
+  isCanceled: boolean;
+  invoiceEdited: boolean;
+  createBy: string;
+  invoiceCreateAt: string;
+  submittedAt: string;
+  contestId: string;
+  
+  // Notice and other fields
+  contestTitle?: string;
+}
+
+export interface PreMeasurement {
+  id: string;
+  contestId: string;
+  playerUid: string;
+  playerName: string;
+  playerTel: string;
+  mediaUrl: string;
+  mediaType: string;
+  createdAt: string;
+}
+
+const API_BASE_URL = `${import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:4300'}/api`;
+
+function getAuthHeaders(headers: Record<string, string> = {}) {
+  return headers;
+}
+
+async function handleResponseError(response: Response) {
+  try {
+    const data = await response.json();
+    return new Error(data.error || 'API 요청 중 오류가 발생했습니다.');
+  } catch {
+    return new Error(`서버 요청 실패 (상태 코드: ${response.status})`);
+  }
+}
+
+export const contestService = {
+  // 1. 접수 목록 조회 (D1 API 사용)
+  async fetchRegistrations(filters: {
+    contestId?: string;
+    keyword?: string;
+    isPriceCheck?: string;
+    isCanceled?: string;
+  } = {}): Promise<Registration[]> {
+    const queryParams = new URLSearchParams();
+    if (filters.contestId) queryParams.append('contestId', filters.contestId);
+    if (filters.keyword) queryParams.append('keyword', filters.keyword);
+    if (filters.isPriceCheck) queryParams.append('isPriceCheck', filters.isPriceCheck);
+    if (filters.isCanceled) queryParams.append('isCanceled', filters.isCanceled);
+
+    const res = await fetch(`${API_BASE_URL}/contest/registrations?${queryParams.toString()}`, {
+      method: 'GET',
+      headers: getAuthHeaders({
+        'Content-Type': 'application/json'
+      }),
+      credentials: 'include'
+    });
+
+    if (!res.ok) {
+      throw await handleResponseError(res);
+    }
+
+    return await res.json();
+  },
+
+  // 2. 입금 확인 여부 수정 (D1 + Firestore 동시 업데이트)
+  async updatePaymentStatus(id: string, isPriceCheck: boolean): Promise<void> {
+    // [A] D1 업데이트
+    const res = await fetch(`${API_BASE_URL}/contest/registrations/${id}/check`, {
+      method: 'POST',
+      headers: getAuthHeaders({
+        'Content-Type': 'application/json'
+      }),
+      credentials: 'include',
+      body: JSON.stringify({ isPriceCheck })
+    });
+
+    if (!res.ok) {
+      throw await handleResponseError(res);
+    }
+
+    // [B] Firestore 업데이트
+    try {
+      const docRef = doc(db, 'invoices_pool', id);
+      await updateDoc(docRef, { isPriceCheck });
+    } catch (err) {
+      console.error('Firestore 입금 확인 상태 동기화 실패:', err);
+    }
+  },
+
+  // 3. 접수 취소 상태 수정 (D1 + Firestore 동시 업데이트)
+  async updateCancelStatus(id: string, isCanceled: boolean): Promise<void> {
+    // [A] D1 업데이트
+    const res = await fetch(`${API_BASE_URL}/contest/registrations/${id}/cancel`, {
+      method: 'POST',
+      headers: getAuthHeaders({
+        'Content-Type': 'application/json'
+      }),
+      credentials: 'include',
+      body: JSON.stringify({ isCanceled })
+    });
+
+    if (!res.ok) {
+      throw await handleResponseError(res);
+    }
+
+    // [B] Firestore 업데이트
+    try {
+      const docRef = doc(db, 'invoices_pool', id);
+      await updateDoc(docRef, { isCanceled });
+    } catch (err) {
+      console.error('Firestore 접수 취소 상태 동기화 실패:', err);
+    }
+  },
+
+  // 4. 접수 정보 수정 및 신규 등록 (Firestore 및 D1 Sync)
+  async saveRegistration(registration: Registration): Promise<void> {
+    // [A] Firestore 저장
+    const playerPhotoUrls = registration.playerPhotoUrls || (registration.playerPhotoUrl ? [registration.playerPhotoUrl] : []);
+    const selectedPhotoUrls = registration.selectedPhotoUrls || [];
+
+    const finalFirestorePayload: Registration & {
+      invoiceEdited: boolean;
+      invoiceEditAt: string;
+      playerPhotoUrlsJson?: string;
+      selectedPhotoUrlsJson?: string;
+    } = { 
+      ...registration,
+      playerPhotoUrls,
+      selectedPhotoUrls,
+      invoiceEdited: true,
+      invoiceEditAt: new Date().toISOString()
+    };
+    if (playerPhotoUrls && playerPhotoUrls.length > 0) {
+      finalFirestorePayload.playerPhotoUrlsJson = JSON.stringify(playerPhotoUrls);
+    }
+    if (selectedPhotoUrls && selectedPhotoUrls.length > 0) {
+      finalFirestorePayload.selectedPhotoUrlsJson = JSON.stringify(selectedPhotoUrls);
+    }
+    
+    const docRef = doc(db, 'invoices_pool', registration.id);
+    await setDoc(docRef, finalFirestorePayload);
+
+    // [B] D1 동기화 (기존의 /api/register 또는 PUT API 활용)
+    const res = await fetch(`${API_BASE_URL}/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        ...registration,
+        playerPhotoUrls,
+        selectedPhotoUrls,
+        invoiceEdited: true,
+        invoiceEditAt: new Date().toISOString()
+      })
+    });
+
+    if (!res.ok) {
+      throw await handleResponseError(res);
+    }
+  },
+
+  // 4-1. 선수 사진 목록 및 선택된 사진 업데이트 전용 메서드
+  async updatePlayerPhotos(
+    registration: Registration, 
+    photoUrls: string[], 
+    selectedPhotoUrls: string[]
+  ): Promise<void> {
+    // 메인 사진은 대회용 1번 사진, 없으면 2번 사진, 없으면 전체 업로드 사진 중 첫번째 사진
+    const mainPhotoUrl = (selectedPhotoUrls[0] && selectedPhotoUrls[0].trim() !== '') 
+      ? selectedPhotoUrls[0] 
+      : (selectedPhotoUrls[1] || photoUrls[0] || '');
+    const updatedRegistration: Registration = {
+      ...registration,
+      playerPhotoUrl: mainPhotoUrl,
+      playerPhotoUrls: photoUrls,
+      selectedPhotoUrls: selectedPhotoUrls
+    };
+
+    await this.saveRegistration(updatedRegistration);
+  },
+
+  // 5. 접수 정보 완전 삭제 (Firestore 및 D1 Sync)
+  async deleteRegistration(id: string): Promise<void> {
+    // [A] Firestore에서 삭제
+    try {
+      await deleteDoc(doc(db, 'invoices_pool', id));
+    } catch (err) {
+      console.error('Firestore 접수 삭제 오류:', err);
+    }
+
+    // [B] D1에서 삭제 (관리자 전용 삭제 API 활용)
+    const res = await fetch(`${API_BASE_URL}/admin/invoices/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+
+    if (!res.ok) {
+      // 만약 토큰 만료 또는 권한 미달(스태프 권한)로 실패하더라도 Firestore가 지워졌으므로 클라이언트에 경고만 남김
+      console.warn('D1 접수 내역 삭제 실패 (권한 제한일 수 있음):', res.status);
+    }
+  },
+
+  // 6. 사전계측 자료 전체 목록 조회 (특정 대회 필터링)
+  async fetchPreMeasurements(contestId: string): Promise<PreMeasurement[]> {
+    const res = await fetch(`${API_BASE_URL}/admin/pre-measurement/list?contestId=${encodeURIComponent(contestId)}`, {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+
+    if (!res.ok) {
+      throw await handleResponseError(res);
+    }
+
+    return await res.json();
+  },
+
+  // 7. 사전계측 자료 단일 레코드 삭제
+  async deletePreMeasurement(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/admin/pre-measurement/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      credentials: 'include'
+    });
+
+    if (!res.ok) {
+      throw await handleResponseError(res);
+    }
+  },
+
+  // 8. Firestore 기준 ➔ Cloudflare D1 데이터 동기화
+  async syncFromFirestore(contestId?: string): Promise<{ success: boolean; count: number; message: string }> {
+    const invoicesRef = collection(db, 'invoices_pool');
+    let q = query(invoicesRef);
+    if (contestId) {
+      q = query(invoicesRef, where('contestId', '==', contestId));
+    }
+    const querySnapshot = await getDocs(q);
+    const invoices: any[] = [];
+    querySnapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+
+      // 사진 목록 안전 가공
+      let photoUrls: string[] = [];
+      if (Array.isArray(data.playerPhotoUrls)) {
+        photoUrls = data.playerPhotoUrls;
+      } else if (typeof data.playerPhotoUrlsJson === 'string' && data.playerPhotoUrlsJson) {
+        try { photoUrls = JSON.parse(data.playerPhotoUrlsJson); } catch (e) {}
+      } else if (typeof data.playerPhotoUrls === 'string' && data.playerPhotoUrls) {
+        try { photoUrls = JSON.parse(data.playerPhotoUrls); } catch (e) {}
+      }
+      if (photoUrls.length === 0 && data.playerPhotoUrl) {
+        photoUrls = [data.playerPhotoUrl];
+      }
+
+      let selectedUrls: string[] = [];
+      if (Array.isArray(data.selectedPhotoUrls)) {
+        selectedUrls = data.selectedPhotoUrls;
+      } else if (typeof data.selectedPhotoUrlsJson === 'string' && data.selectedPhotoUrlsJson) {
+        try { selectedUrls = JSON.parse(data.selectedPhotoUrlsJson); } catch (e) {}
+      } else if (typeof data.selectedPhotoUrls === 'string' && data.selectedPhotoUrls) {
+        try { selectedUrls = JSON.parse(data.selectedPhotoUrls); } catch (e) {}
+      }
+
+      invoices.push({
+        id: docSnap.id,
+        ...data,
+        playerPhotoUrls: photoUrls,
+        selectedPhotoUrls: selectedUrls
+      });
+    });
+
+    if (invoices.length === 0) {
+      return { success: true, count: 0, message: '동기화할 Firestore 접수 데이터가 없습니다.' };
+    }
+
+    const res = await fetch(`${API_BASE_URL}/contest/sync-from-firestore`, {
+      method: 'POST',
+      headers: getAuthHeaders({
+        'Content-Type': 'application/json'
+      }),
+      credentials: 'include',
+      body: JSON.stringify({ invoices })
+    });
+
+    if (!res.ok) {
+      throw await handleResponseError(res);
+    }
+
+    const result = await res.json();
+    return result;
+  }
+};

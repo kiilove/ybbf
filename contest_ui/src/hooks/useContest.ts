@@ -19,7 +19,14 @@ interface ContestState {
   lastSyncedTime: number;
 
   // Actions
-  fetchList: (forceSync?: boolean) => Promise<void>;
+  fetchList: (forceSync?: boolean, silent?: boolean) => Promise<void>;
+  updatePlayerPhotos: (
+    registration: Registration, 
+    photoUrls: string[], 
+    selectedPhotoUrls: string[], 
+    stagePhoto1?: string, 
+    stagePhoto2?: string
+  ) => Promise<void>;
   setFilter: (key: keyof Filters, value: string) => void;
   resetFilters: (defaultContestId?: string) => void;
   togglePaymentStatus: (id: string, isPriceCheck: boolean, sessionUser: any) => Promise<boolean>;
@@ -50,8 +57,14 @@ export const useContest = create<ContestState>((set, get) => ({
   lastSyncedContestId: null,
   lastSyncedTime: 0,
 
-  fetchList: async (forceSync = false) => {
-    set({ isLoading: true, error: null });
+  fetchList: async (forceSync = false, silent = false) => {
+    const hasData = get().registrations.length > 0;
+    if (!silent && !hasData) {
+      set({ isLoading: true, error: null });
+    } else {
+      set({ error: null });
+    }
+
     try {
       const { filters, lastSyncedContestId, lastSyncedTime } = get();
       const now = Date.now();
@@ -83,6 +96,38 @@ export const useContest = create<ContestState>((set, get) => ({
       const errMsg = err instanceof Error ? err.message : '접수 명단을 불러오는데 실패했습니다.';
       set({ error: errMsg, isLoading: false });
     }
+  },
+
+  updatePlayerPhotos: async (
+    registration: Registration,
+    photoUrls: string[],
+    selectedPhotoUrls: string[],
+    stagePhoto1?: string,
+    stagePhoto2?: string
+  ) => {
+    const s1 = stagePhoto1 !== undefined ? stagePhoto1 : (selectedPhotoUrls[0] || '');
+    const s2 = stagePhoto2 !== undefined ? stagePhoto2 : (selectedPhotoUrls[1] || '');
+    const mainPhotoUrl = (s1 && s1.trim() !== '') ? s1 : (s2 || photoUrls[0] || '');
+
+    const updatedRegistration: Registration = {
+      ...registration,
+      playerPhotoUrl: mainPhotoUrl,
+      playerPhotoUrls: photoUrls,
+      photos: photoUrls,
+      selectedPhotoUrls: [s1, s2],
+      stagePhoto1: s1,
+      stagePhoto2: s2
+    };
+
+    // ⚡️ 1. 즉시 로컬 Zustand 상태 낙관적(Optimistic) 갱신 ➔ 화면 깜빡임/지연 0ms
+    set((state) => ({
+      registrations: state.registrations.map((r) =>
+        r.id === registration.id ? updatedRegistration : r
+      )
+    }));
+
+    // ⚡️ 2. 백그라운드에서 Firestore & D1 안전 저장
+    await contestService.saveRegistration(updatedRegistration);
   },
 
   setFilter: (key, value) => {

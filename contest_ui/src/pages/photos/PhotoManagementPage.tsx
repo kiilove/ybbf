@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useContest } from '../../hooks/useContest';
-import { contestService } from '../../services/contestService';
 import { authService } from '../../services/authService';
 import type { Registration } from '../../services/contestService';
 import type { SimpleContest } from '../../services/authService';
@@ -23,7 +22,7 @@ interface CategoryGroup {
 
 export default function PhotoManagementPage() {
   const { staff } = useAuth();
-  const { registrations, isLoading, filters, fetchList, setFilter } = useContest();
+  const { registrations, isLoading, filters, fetchList, setFilter, updatePlayerPhotos } = useContest();
   const [contests, setContests] = useState<SimpleContest[]>([]);
   
   // Filtering & View Mode State
@@ -238,8 +237,7 @@ export default function PhotoManagementPage() {
     }
 
     try {
-      await contestService.updatePlayerPhotos(reg, allPhotos, [slot1, slot2], slot1, slot2);
-      await fetchList(false); // 새로고침
+      await updatePlayerPhotos(reg, allPhotos, [slot1, slot2], slot1, slot2);
     } catch (err: any) {
       setConfirmConfig({
         isOpen: true,
@@ -309,8 +307,7 @@ export default function PhotoManagementPage() {
         }
       }
 
-      await contestService.updatePlayerPhotos(reg, currentPhotos, [slot1, slot2], slot1, slot2);
-      await fetchList(false);
+      await updatePlayerPhotos(reg, currentPhotos, [slot1, slot2], slot1, slot2);
 
       const slotLabel = targetSlot ? `대회용 ${targetSlot}번 사진` : '새 사진';
       setConfirmConfig({
@@ -356,11 +353,10 @@ export default function PhotoManagementPage() {
           if (slot1 === photoUrl) slot1 = '';
           if (slot2 === photoUrl) slot2 = '';
 
-          await contestService.updatePlayerPhotos(reg, currentPhotos, [slot1, slot2], slot1, slot2);
+          await updatePlayerPhotos(reg, currentPhotos, [slot1, slot2], slot1, slot2);
           if (lightboxPhoto?.url === photoUrl) {
             setLightboxPhoto(null);
           }
-          await fetchList();
         } catch (err: any) {
           alert('사진 삭제 실패: ' + err.message);
         }
@@ -533,7 +529,7 @@ export default function PhotoManagementPage() {
       </div>
 
       {/* Main Category -> Grade -> Player Tree List */}
-      {isLoading ? (
+      {isLoading && registrations.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af' }}>
           <RefreshCw size={32} className="spin-animation" style={{ marginBottom: '12px' }} />
           <div>선수 목록 및 사진 정보를 불러오는 중입니다...</div>

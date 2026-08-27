@@ -11,6 +11,7 @@ import {
   Plus
 } from 'lucide-react';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import { uploadToR2 } from '../../services/uploadToR2Service';
 
 interface CategoryGroup {
   categoryTitle: string;
@@ -200,18 +201,21 @@ export default function PhotoManagementPage() {
 
   // 대회용 1번 또는 2번 사진 직접 지정/해제 핸들러
   const handleSetContestPhoto = async (reg: Registration, photoUrl: string, slot: 1 | 2) => {
+    // 1. photos 풀 배열 정리 (기존 사진들 중복 제거 및 누락 방지)
     const allPhotos: string[] = [];
-    if (reg.playerPhotoUrls && reg.playerPhotoUrls.length > 0) {
-      reg.playerPhotoUrls.forEach(url => {
-        if (url && !allPhotos.includes(url)) allPhotos.push(url);
-      });
-    }
+    const sourcePhotos = reg.photos || reg.playerPhotoUrls || [];
+    sourcePhotos.forEach(url => {
+      if (url && !allPhotos.includes(url)) allPhotos.push(url);
+    });
     if (reg.playerPhotoUrl && !allPhotos.includes(reg.playerPhotoUrl)) {
       allPhotos.unshift(reg.playerPhotoUrl);
     }
+    if (photoUrl && !allPhotos.includes(photoUrl)) {
+      allPhotos.push(photoUrl);
+    }
 
-    let slot1 = reg.selectedPhotoUrls?.[0] || '';
-    let slot2 = reg.selectedPhotoUrls?.[1] || '';
+    let slot1 = reg.stagePhoto1 || reg.selectedPhotoUrls?.[0] || '';
+    let slot2 = reg.stagePhoto2 || reg.selectedPhotoUrls?.[1] || '';
 
     if (slot === 1) {
       if (slot1 === photoUrl) {
@@ -233,10 +237,8 @@ export default function PhotoManagementPage() {
       }
     }
 
-    const updatedSelected: string[] = [slot1, slot2];
-
     try {
-      await contestService.updatePlayerPhotos(reg, allPhotos, updatedSelected);
+      await contestService.updatePlayerPhotos(reg, allPhotos, [slot1, slot2], slot1, slot2);
       await fetchList(false); // 새로고침
     } catch (err: any) {
       setConfirmConfig({
@@ -252,11 +254,11 @@ export default function PhotoManagementPage() {
 
   // Upload Photo for Player (특정 슬롯 1번/2번 지정 업로드 또는 일반 추가)
   const handleUploadFile = async (reg: Registration, file: File, targetSlot?: 1 | 2) => {
-    if (file.size > 3 * 1024 * 1024) {
+    if (file.size > 10 * 1024 * 1024) {
       setConfirmConfig({
         isOpen: true,
         title: '용량 제한 초과',
-        message: '사진 파일 크기는 3MB 이하로 업로드해 주세요.',
+        message: '사진 파일 크기는 10MB 이하로 업로드해 주세요.',
         confirmText: '확인',
         type: 'danger',
         onConfirm: () => setConfirmConfig(prev => ({ ...prev, isOpen: false }))
@@ -267,77 +269,70 @@ export default function PhotoManagementPage() {
     setIsUploadingMap(prev => ({ ...prev, [reg.id]: true }));
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const dataUrl = e.target?.result as string;
-        if (!dataUrl) return;
+      // 1. Cloudflare R2로 이미지 파일 직접 업로드 (고해상도 CDN URL 획득)
+      const playerIdentifier = reg.playerUid || reg.playerTel || reg.id;
+      const uploadedR2Url = await uploadToR2(file, `contest_player_${playerIdentifier}`, true);
 
-        // 1. 기존 업로드 사진 풀 목록 정리 (원본/가공본 모두 보관)
-        const currentPhotos: string[] = [];
-        if (reg.playerPhotoUrls && reg.playerPhotoUrls.length > 0) {
-          reg.playerPhotoUrls.forEach(url => {
-            if (url && !currentPhotos.includes(url)) currentPhotos.push(url);
-          });
+      if (!uploadedR2Url) {
+        throw new Error('업로드된 사진 주소를 가져오지 못했습니다.');
+      }
+
+      // 2. photos 배열에 새로 업로드한 사진 추가 (원본/가공본 모두 보관)
+      const currentPhotos: string[] = [];
+      const sourcePhotos = reg.photos || reg.playerPhotoUrls || [];
+      sourcePhotos.forEach(url => {
+        if (url && !currentPhotos.includes(url)) currentPhotos.push(url);
+      });
+      if (reg.playerPhotoUrl && !currentPhotos.includes(reg.playerPhotoUrl)) {
+        currentPhotos.unshift(reg.playerPhotoUrl);
+      }
+      if (!currentPhotos.includes(uploadedR2Url)) {
+        currentPhotos.push(uploadedR2Url);
+      }
+
+      // 3. stagePhoto1, stagePhoto2 슬롯 지정
+      let slot1 = reg.stagePhoto1 || reg.selectedPhotoUrls?.[0] || '';
+      let slot2 = reg.stagePhoto2 || reg.selectedPhotoUrls?.[1] || '';
+
+      if (targetSlot === 1) {
+        slot1 = uploadedR2Url;
+        if (slot2 === uploadedR2Url) slot2 = '';
+      } else if (targetSlot === 2) {
+        slot2 = uploadedR2Url;
+        if (slot1 === uploadedR2Url) slot1 = '';
+      } else {
+        // targetSlot 미지정 시: 1번이 비어있으면 1번으로, 1번이 차있고 2번이 비어있으면 2번으로 배정
+        if (!slot1) {
+          slot1 = uploadedR2Url;
+        } else if (!slot2 && slot1 !== uploadedR2Url) {
+          slot2 = uploadedR2Url;
         }
-        if (reg.playerPhotoUrl && !currentPhotos.includes(reg.playerPhotoUrl)) {
-          currentPhotos.unshift(reg.playerPhotoUrl);
-        }
-        if (!currentPhotos.includes(dataUrl)) {
-          currentPhotos.push(dataUrl);
-        }
+      }
 
-        // 2. 대회용 1번 / 2번 지정 로직
-        let slot1 = reg.selectedPhotoUrls?.[0] || '';
-        let slot2 = reg.selectedPhotoUrls?.[1] || '';
+      await contestService.updatePlayerPhotos(reg, currentPhotos, [slot1, slot2], slot1, slot2);
+      await fetchList(false);
 
-        if (targetSlot === 1) {
-          slot1 = dataUrl;
-          if (slot2 === dataUrl) slot2 = '';
-        } else if (targetSlot === 2) {
-          slot2 = dataUrl;
-          if (slot1 === dataUrl) slot1 = '';
-        } else {
-          // targetSlot 미지정 시: 1번이 비어있으면 1번으로, 1번이 차있고 2번이 비어있으면 2번으로 배정
-          if (!slot1) {
-            slot1 = dataUrl;
-          } else if (!slot2 && slot1 !== dataUrl) {
-            slot2 = dataUrl;
-          }
-        }
-
-        const updatedSelected: string[] = [slot1, slot2];
-
-        await contestService.updatePlayerPhotos(reg, currentPhotos, updatedSelected);
-        await fetchList(false);
-
-        const slotLabel = targetSlot ? `대회용 ${targetSlot}번 사진` : '새 사진';
-        setConfirmConfig({
-          isOpen: true,
-          title: '업로드 완료',
-          message: `${reg.playerName} 선수의 ${slotLabel}이 성공적으로 등록되었습니다.`,
-          confirmText: '확인',
-          type: 'success',
-          onConfirm: () => setConfirmConfig(prev => ({ ...prev, isOpen: false }))
-        });
-
-        setIsUploadingMap(prev => ({ ...prev, [reg.id]: false }));
-      };
-
-      reader.onerror = () => {
-        throw new Error('파일을 읽는 중 오류가 발생했습니다.');
-      };
-
-      reader.readAsDataURL(file);
+      const slotLabel = targetSlot ? `대회용 ${targetSlot}번 사진` : '새 사진';
+      setConfirmConfig({
+        isOpen: true,
+        title: '업로드 완료',
+        message: `${reg.playerName} 선수의 ${slotLabel}이 성공적으로 등록되었습니다.`,
+        confirmText: '확인',
+        type: 'success',
+        onConfirm: () => setConfirmConfig(prev => ({ ...prev, isOpen: false }))
+      });
     } catch (err: any) {
-      setIsUploadingMap(prev => ({ ...prev, [reg.id]: false }));
+      console.error('업로드 실패:', err);
       setConfirmConfig({
         isOpen: true,
         title: '업로드 오류',
-        message: '사진 업로드 중 오류가 발생했습니다: ' + err.message,
+        message: '사진 업로드 중 오류가 발생했습니다: ' + (err.message || '서버 오류'),
         confirmText: '확인',
         type: 'danger',
         onConfirm: () => setConfirmConfig(prev => ({ ...prev, isOpen: false }))
       });
+    } finally {
+      setIsUploadingMap(prev => ({ ...prev, [reg.id]: false }));
     }
   };
 
@@ -353,10 +348,15 @@ export default function PhotoManagementPage() {
       onConfirm: async () => {
         setConfirmConfig(prev => ({ ...prev, isOpen: false }));
         try {
-          const currentPhotos = (reg.playerPhotoUrls || []).filter(u => u !== photoUrl);
-          const currentSelected = (reg.selectedPhotoUrls || []).filter(u => u !== photoUrl);
+          const rawPhotos = reg.photos || reg.playerPhotoUrls || [];
+          const currentPhotos = rawPhotos.filter(u => u !== photoUrl);
+          let slot1 = reg.stagePhoto1 || reg.selectedPhotoUrls?.[0] || '';
+          let slot2 = reg.stagePhoto2 || reg.selectedPhotoUrls?.[1] || '';
 
-          await contestService.updatePlayerPhotos(reg, currentPhotos, currentSelected);
+          if (slot1 === photoUrl) slot1 = '';
+          if (slot2 === photoUrl) slot2 = '';
+
+          await contestService.updatePlayerPhotos(reg, currentPhotos, [slot1, slot2], slot1, slot2);
           if (lightboxPhoto?.url === photoUrl) {
             setLightboxPhoto(null);
           }
@@ -632,17 +632,16 @@ export default function PhotoManagementPage() {
                             <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
                               {gradeGroup.players.map((reg) => {
                                 const allPhotos: string[] = [];
-                                if (reg.playerPhotoUrls && reg.playerPhotoUrls.length > 0) {
-                                  reg.playerPhotoUrls.forEach(url => {
-                                    if (url && !allPhotos.includes(url)) allPhotos.push(url);
-                                  });
-                                }
+                                const sourcePhotos = reg.photos || reg.playerPhotoUrls || [];
+                                sourcePhotos.forEach(url => {
+                                  if (url && !allPhotos.includes(url)) allPhotos.push(url);
+                                });
                                 if (reg.playerPhotoUrl && !allPhotos.includes(reg.playerPhotoUrl)) {
                                   allPhotos.unshift(reg.playerPhotoUrl);
                                 }
                                 
-                                const slot1 = reg.selectedPhotoUrls?.[0] || '';
-                                const slot2 = reg.selectedPhotoUrls?.[1] || '';
+                                const slot1 = reg.stagePhoto1 || reg.selectedPhotoUrls?.[0] || '';
+                                const slot2 = reg.stagePhoto2 || reg.selectedPhotoUrls?.[1] || '';
                                 const hasPhotos = allPhotos.length > 0;
                                 const isUploading = isUploadingMap[reg.id];
 
@@ -1129,8 +1128,8 @@ export default function PhotoManagementPage() {
 
             {/* Lightbox Footer Actions */}
             {(() => {
-              const curSlot1 = lightboxPhoto.registration.selectedPhotoUrls?.[0] || '';
-              const curSlot2 = lightboxPhoto.registration.selectedPhotoUrls?.[1] || '';
+              const curSlot1 = lightboxPhoto.registration.stagePhoto1 || lightboxPhoto.registration.selectedPhotoUrls?.[0] || '';
+              const curSlot2 = lightboxPhoto.registration.stagePhoto2 || lightboxPhoto.registration.selectedPhotoUrls?.[1] || '';
               const isCur1 = curSlot1 === lightboxPhoto.url;
               const isCur2 = curSlot2 === lightboxPhoto.url;
 
@@ -1151,13 +1150,15 @@ export default function PhotoManagementPage() {
                       onClick={async () => {
                         await handleSetContestPhoto(lightboxPhoto.registration, lightboxPhoto.url, 1);
                         const updatedReg = { ...lightboxPhoto.registration };
-                        let s1 = updatedReg.selectedPhotoUrls?.[0] || '';
-                        let s2 = updatedReg.selectedPhotoUrls?.[1] || '';
+                        let s1 = updatedReg.stagePhoto1 || updatedReg.selectedPhotoUrls?.[0] || '';
+                        let s2 = updatedReg.stagePhoto2 || updatedReg.selectedPhotoUrls?.[1] || '';
                         if (s1 === lightboxPhoto.url) s1 = '';
                         else {
                           s1 = lightboxPhoto.url;
                           if (s2 === lightboxPhoto.url) s2 = '';
                         }
+                        updatedReg.stagePhoto1 = s1;
+                        updatedReg.stagePhoto2 = s2;
                         updatedReg.selectedPhotoUrls = [s1, s2];
                         setLightboxPhoto(prev => prev ? { ...prev, registration: updatedReg } : null);
                       }}
@@ -1184,13 +1185,15 @@ export default function PhotoManagementPage() {
                       onClick={async () => {
                         await handleSetContestPhoto(lightboxPhoto.registration, lightboxPhoto.url, 2);
                         const updatedReg = { ...lightboxPhoto.registration };
-                        let s1 = updatedReg.selectedPhotoUrls?.[0] || '';
-                        let s2 = updatedReg.selectedPhotoUrls?.[1] || '';
+                        let s1 = updatedReg.stagePhoto1 || updatedReg.selectedPhotoUrls?.[0] || '';
+                        let s2 = updatedReg.stagePhoto2 || updatedReg.selectedPhotoUrls?.[1] || '';
                         if (s2 === lightboxPhoto.url) s2 = '';
                         else {
                           s2 = lightboxPhoto.url;
                           if (s1 === lightboxPhoto.url) s1 = '';
                         }
+                        updatedReg.stagePhoto1 = s1;
+                        updatedReg.stagePhoto2 = s2;
                         updatedReg.selectedPhotoUrls = [s1, s2];
                         setLightboxPhoto(prev => prev ? { ...prev, registration: updatedReg } : null);
                       }}

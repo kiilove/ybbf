@@ -1158,13 +1158,24 @@ app.get('/api/notifications/subscriptions', async (c) => {
   }
 });
 
+// invoices_pool 컬럼 자동 보정 헬퍼
+async function ensureInvoicesPoolColumns(db: D1Database) {
+  try {
+    await db.prepare("ALTER TABLE invoices_pool ADD COLUMN stagePhoto1 TEXT").run();
+  } catch (e) {}
+  try {
+    await db.prepare("ALTER TABLE invoices_pool ADD COLUMN stagePhoto2 TEXT").run();
+  } catch (e) {}
+}
+
 // 8. 대회 참가 접수 데이터 D1 적재 API
 app.post('/api/register', async (c) => {
   try {
     const payload = await c.req.json();
     const {
       id, playerUid, playerName, playerGender, playerBirth, playerTel,
-      playerEmail, playerGym, playerText, playerPhotoUrl, playerPhotoUrls, selectedPhotoUrls, playerService,
+      playerEmail, playerGym, playerText, playerPhotoUrl, playerPhotoUrls, selectedPhotoUrls,
+      stagePhoto1, stagePhoto2, playerService,
       joins, contestPriceSum, contestPriceTotal, playerAge, isPriceCheck,
       isCanceled, invoiceEdited, createBy, invoiceCreateAt, invoiceEditAt, contestId, submittedAt
     } = payload;
@@ -1175,33 +1186,45 @@ app.post('/api/register', async (c) => {
 
     // 사진 목록 안전 가공 (배열, JSON 문자열, 단일 URL 모두 수용)
     let photoUrlsStr = '[]';
-    if (playerPhotoUrls) {
-      photoUrlsStr = typeof playerPhotoUrls === 'string' ? playerPhotoUrls : JSON.stringify(playerPhotoUrls);
+    const rawPhotos = payload.photos || playerPhotoUrls;
+    if (rawPhotos) {
+      photoUrlsStr = typeof rawPhotos === 'string' ? rawPhotos : JSON.stringify(rawPhotos);
     } else if (payload.playerPhotoUrlsJson) {
       photoUrlsStr = typeof payload.playerPhotoUrlsJson === 'string' ? payload.playerPhotoUrlsJson : JSON.stringify(payload.playerPhotoUrlsJson);
     } else if (playerPhotoUrl) {
       photoUrlsStr = JSON.stringify([playerPhotoUrl]);
     }
 
-    let selectedUrlsStr = '[]';
-    if (selectedPhotoUrls) {
-      selectedUrlsStr = typeof selectedPhotoUrls === 'string' ? selectedPhotoUrls : JSON.stringify(selectedPhotoUrls);
+    let selectedUrlsArr: string[] = [];
+    if (Array.isArray(selectedPhotoUrls)) {
+      selectedUrlsArr = selectedPhotoUrls;
+    } else if (typeof selectedPhotoUrls === 'string') {
+      try { selectedUrlsArr = JSON.parse(selectedPhotoUrls); } catch (e) {}
     } else if (payload.selectedPhotoUrlsJson) {
-      selectedUrlsStr = typeof payload.selectedPhotoUrlsJson === 'string' ? payload.selectedPhotoUrlsJson : JSON.stringify(payload.selectedPhotoUrlsJson);
+      try { selectedUrlsArr = JSON.parse(payload.selectedPhotoUrlsJson); } catch (e) {}
     }
+
+    const finalStagePhoto1 = stagePhoto1 || selectedUrlsArr[0] || null;
+    const finalStagePhoto2 = stagePhoto2 || selectedUrlsArr[1] || null;
+    const selectedUrlsStr = JSON.stringify([finalStagePhoto1 || '', finalStagePhoto2 || '']);
+
+    await ensureInvoicesPoolColumns(c.env.DB);
 
     await c.env.DB.prepare(`
       INSERT OR REPLACE INTO invoices_pool (
         id, playerUid, playerName, playerGender, playerBirth, playerTel,
-        playerEmail, playerGym, playerText, playerPhotoUrl, playerPhotoUrls, selectedPhotoUrls, playerService,
+        playerEmail, playerGym, playerText, playerPhotoUrl, playerPhotoUrls, selectedPhotoUrls,
+        stagePhoto1, stagePhoto2, playerService,
         joins, contestPriceSum, contestPriceTotal, playerAge, isPriceCheck,
         isCanceled, invoiceEdited, createBy, invoiceCreateAt, invoiceEditAt, contestId, submittedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       id, playerUid, playerName, playerGender, playerBirth, playerTel,
       playerEmail || null, playerGym, playerText || null, playerPhotoUrl || null,
       photoUrlsStr,
       selectedUrlsStr,
+      finalStagePhoto1,
+      finalStagePhoto2,
       playerService ? 1 : 0,
       typeof joins === 'string' ? joins : JSON.stringify(joins || []),
       contestPriceSum, contestPriceTotal, playerAge || null, isPriceCheck ? 1 : 0,
@@ -2755,11 +2778,17 @@ app.get('/api/contest/registrations', contestMiddleware, async (c) => {
         }
       } catch (e) {}
 
+      const stagePhoto1 = (item.stagePhoto1 as string) || selectedPhotoUrls[0] || '';
+      const stagePhoto2 = (item.stagePhoto2 as string) || selectedPhotoUrls[1] || '';
+
       return {
         ...item,
         joins: item.joins ? JSON.parse(item.joins as string) : [],
         playerPhotoUrls,
-        selectedPhotoUrls,
+        photos: playerPhotoUrls,
+        selectedPhotoUrls: [stagePhoto1, stagePhoto2],
+        stagePhoto1,
+        stagePhoto2,
         isPriceCheck: !!item.isPriceCheck,
         isCanceled: !!item.isCanceled,
         invoiceEdited: !!item.invoiceEdited,
@@ -2867,6 +2896,8 @@ app.post('/api/contest/sync-from-firestore', contestMiddleware, async (c) => {
       return c.json({ error: '동기화할 접수 내역 데이터가 없습니다.' }, 400);
     }
 
+    await ensureInvoicesPoolColumns(c.env.DB);
+
     const statements: any[] = [];
     for (const item of invoices) {
       if (!item.id || !item.playerName || !item.playerBirth || !item.playerTel || !item.playerGym) {
@@ -2875,29 +2906,37 @@ app.post('/api/contest/sync-from-firestore', contestMiddleware, async (c) => {
 
       // 사진 목록 안전 가공 (배열, JSON 문자열, 단일 URL 모두 수용)
       let photoUrlsStr = '[]';
-      if (item.playerPhotoUrls) {
-        photoUrlsStr = typeof item.playerPhotoUrls === 'string' ? item.playerPhotoUrls : JSON.stringify(item.playerPhotoUrls);
+      const rawPhotos = item.photos || item.playerPhotoUrls;
+      if (rawPhotos) {
+        photoUrlsStr = typeof rawPhotos === 'string' ? rawPhotos : JSON.stringify(rawPhotos);
       } else if (item.playerPhotoUrlsJson) {
         photoUrlsStr = typeof item.playerPhotoUrlsJson === 'string' ? item.playerPhotoUrlsJson : JSON.stringify(item.playerPhotoUrlsJson);
       } else if (item.playerPhotoUrl) {
         photoUrlsStr = JSON.stringify([item.playerPhotoUrl]);
       }
 
-      let selectedUrlsStr = '[]';
-      if (item.selectedPhotoUrls) {
-        selectedUrlsStr = typeof item.selectedPhotoUrls === 'string' ? item.selectedPhotoUrls : JSON.stringify(item.selectedPhotoUrls);
+      let selectedUrlsArr: string[] = [];
+      if (Array.isArray(item.selectedPhotoUrls)) {
+        selectedUrlsArr = item.selectedPhotoUrls;
+      } else if (typeof item.selectedPhotoUrls === 'string') {
+        try { selectedUrlsArr = JSON.parse(item.selectedPhotoUrls); } catch (e) {}
       } else if (item.selectedPhotoUrlsJson) {
-        selectedUrlsStr = typeof item.selectedPhotoUrlsJson === 'string' ? item.selectedPhotoUrlsJson : JSON.stringify(item.selectedPhotoUrlsJson);
+        try { selectedUrlsArr = JSON.parse(item.selectedPhotoUrlsJson); } catch (e) {}
       }
+
+      const finalStagePhoto1 = item.stagePhoto1 || selectedUrlsArr[0] || null;
+      const finalStagePhoto2 = item.stagePhoto2 || selectedUrlsArr[1] || null;
+      const selectedUrlsStr = JSON.stringify([finalStagePhoto1 || '', finalStagePhoto2 || '']);
 
       const stmt = c.env.DB.prepare(`
         INSERT OR REPLACE INTO invoices_pool (
           id, playerUid, playerName, playerGender, playerBirth, playerTel,
           playerEmail, playerGym, playerText, playerPhotoUrl, playerPhotoUrls,
+          stagePhoto1, stagePhoto2, selectedPhotoUrls,
           playerService, joins, contestPriceSum, contestPriceTotal, playerAge,
           isPriceCheck, isCanceled, invoiceEdited, createBy, invoiceCreateAt,
-          invoiceEditAt, contestId, selectedPhotoUrls, submittedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          invoiceEditAt, contestId, submittedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         item.id,
         item.playerUid || 'guest',
@@ -2910,6 +2949,9 @@ app.post('/api/contest/sync-from-firestore', contestMiddleware, async (c) => {
         item.playerText || null,
         item.playerPhotoUrl || null,
         photoUrlsStr,
+        finalStagePhoto1,
+        finalStagePhoto2,
+        selectedUrlsStr,
         item.playerService ? 1 : 0,
         typeof item.joins === 'string' ? item.joins : JSON.stringify(item.joins || []),
         item.contestPriceSum || 0,
@@ -2922,7 +2964,6 @@ app.post('/api/contest/sync-from-firestore', contestMiddleware, async (c) => {
         item.invoiceCreateAt || item.submittedAt || new Date().toISOString(),
         item.invoiceEditAt || null,
         item.contestId || null,
-        selectedUrlsStr,
         item.submittedAt || item.invoiceCreateAt || new Date().toISOString()
       );
       statements.push(stmt);

@@ -20,9 +20,12 @@ export interface Registration {
   playerText?: string;
   playerPhotoUrl?: string;
   playerPhotoUrls?: string[];
+  photos?: string[];
   playerPhotoUrlsJson?: string;
   selectedPhotoUrls?: string[];
   selectedPhotoUrlsJson?: string;
+  stagePhoto1?: string;
+  stagePhoto2?: string;
   playerService: boolean;
   joins: JoinItem[];
   contestPriceSum: number;
@@ -148,8 +151,12 @@ export const contestService = {
   // 4. 접수 정보 수정 및 신규 등록 (Firestore 및 D1 Sync)
   async saveRegistration(registration: Registration): Promise<void> {
     // [A] Firestore 저장
-    const playerPhotoUrls = registration.playerPhotoUrls || (registration.playerPhotoUrl ? [registration.playerPhotoUrl] : []);
-    const selectedPhotoUrls = registration.selectedPhotoUrls || [];
+    const rawPhotos = registration.photos || registration.playerPhotoUrls || (registration.playerPhotoUrl ? [registration.playerPhotoUrl] : []);
+    const playerPhotoUrls = Array.from(new Set(rawPhotos.filter(Boolean)));
+    const stagePhoto1 = registration.stagePhoto1 || registration.selectedPhotoUrls?.[0] || '';
+    const stagePhoto2 = registration.stagePhoto2 || registration.selectedPhotoUrls?.[1] || '';
+    const selectedPhotoUrls = [stagePhoto1, stagePhoto2];
+    const mainPhotoUrl = stagePhoto1 || stagePhoto2 || playerPhotoUrls[0] || '';
 
     const finalFirestorePayload: Registration & {
       invoiceEdited: boolean;
@@ -158,8 +165,12 @@ export const contestService = {
       selectedPhotoUrlsJson?: string;
     } = { 
       ...registration,
+      playerPhotoUrl: mainPhotoUrl,
       playerPhotoUrls,
+      photos: playerPhotoUrls,
       selectedPhotoUrls,
+      stagePhoto1,
+      stagePhoto2,
       invoiceEdited: true,
       invoiceEditAt: new Date().toISOString()
     };
@@ -180,13 +191,7 @@ export const contestService = {
         'Content-Type': 'application/json'
       },
       credentials: 'include',
-      body: JSON.stringify({
-        ...registration,
-        playerPhotoUrls,
-        selectedPhotoUrls,
-        invoiceEdited: true,
-        invoiceEditAt: new Date().toISOString()
-      })
+      body: JSON.stringify(finalFirestorePayload)
     });
 
     if (!res.ok) {
@@ -198,17 +203,24 @@ export const contestService = {
   async updatePlayerPhotos(
     registration: Registration, 
     photoUrls: string[], 
-    selectedPhotoUrls: string[]
+    selectedPhotoUrls: string[],
+    stagePhoto1?: string,
+    stagePhoto2?: string
   ): Promise<void> {
-    // 메인 사진은 대회용 1번 사진, 없으면 2번 사진, 없으면 전체 업로드 사진 중 첫번째 사진
-    const mainPhotoUrl = (selectedPhotoUrls[0] && selectedPhotoUrls[0].trim() !== '') 
-      ? selectedPhotoUrls[0] 
-      : (selectedPhotoUrls[1] || photoUrls[0] || '');
+    const s1 = stagePhoto1 !== undefined ? stagePhoto1 : (selectedPhotoUrls[0] || '');
+    const s2 = stagePhoto2 !== undefined ? stagePhoto2 : (selectedPhotoUrls[1] || '');
+    const mainPhotoUrl = (s1 && s1.trim() !== '') 
+      ? s1 
+      : (s2 || photoUrls[0] || '');
+
     const updatedRegistration: Registration = {
       ...registration,
       playerPhotoUrl: mainPhotoUrl,
       playerPhotoUrls: photoUrls,
-      selectedPhotoUrls: selectedPhotoUrls
+      photos: photoUrls,
+      selectedPhotoUrls: [s1, s2],
+      stagePhoto1: s1,
+      stagePhoto2: s2
     };
 
     await this.saveRegistration(updatedRegistration);

@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS invoices_pool (
   invoiceEditAt TEXT,
   contestId TEXT,
   playerPhotoUrls TEXT,
+  selectedPhotoUrls TEXT,
+  stagePhoto1 TEXT,
+  stagePhoto2 TEXT,
   submittedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

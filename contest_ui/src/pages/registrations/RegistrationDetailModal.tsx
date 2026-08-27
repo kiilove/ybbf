@@ -143,31 +143,59 @@ export default function RegistrationDetailModal({ registration, onClose }: Detai
             {/* Photos */}
             {(() => {
               const allPhotos: string[] = [];
-              if (registration.playerPhotoUrls && registration.playerPhotoUrls.length > 0) {
-                registration.playerPhotoUrls.forEach(url => {
-                  if (url && !allPhotos.includes(url)) allPhotos.push(url);
-                });
-              }
+              const sourcePhotos = registration.photos || registration.playerPhotoUrls || [];
+              sourcePhotos.forEach(url => {
+                if (url && !allPhotos.includes(url)) allPhotos.push(url);
+              });
               if (registration.playerPhotoUrl && !allPhotos.includes(registration.playerPhotoUrl)) {
                 allPhotos.unshift(registration.playerPhotoUrl);
               }
 
               if (allPhotos.length === 0) return null;
 
+              const slot1 = registration.stagePhoto1 || registration.selectedPhotoUrls?.[0] || '';
+              const slot2 = registration.stagePhoto2 || registration.selectedPhotoUrls?.[1] || '';
+
               return (
                 <div className="detail-row full-width">
-                  <span className="detail-label">제출된 사진 (Photo - {allPhotos.length}장)</span>
+                  <span className="detail-label">선수 사진 풀 ({allPhotos.length}장)</span>
                   <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginTop: '6px' }}>
-                    {allPhotos.map((url, idx) => (
-                      <div key={idx} style={{ width: '120px', height: '150px', border: '1px solid var(--color-divider)', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#000' }}>
-                        <img 
-                          src={url} 
-                          alt={`참가자 사진 ${idx + 1}`} 
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
-                      </div>
-                    ))}
+                    {allPhotos.map((url, idx) => {
+                      const isSlot1 = slot1 === url;
+                      const isSlot2 = slot2 === url;
+
+                      return (
+                        <div 
+                          key={idx} 
+                          style={{ 
+                            position: 'relative',
+                            width: '120px', 
+                            height: '150px', 
+                            border: `2px solid ${isSlot1 ? '#10b981' : (isSlot2 ? '#3b82f6' : 'var(--color-divider)')}`, 
+                            borderRadius: '8px', 
+                            overflow: 'hidden', 
+                            backgroundColor: '#000' 
+                          }}
+                        >
+                          <img 
+                            src={url} 
+                            alt={`참가자 사진 ${idx + 1}`} 
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                          {isSlot1 && (
+                            <div style={{ position: 'absolute', top: '4px', left: '4px', backgroundColor: '#10b981', color: '#fff', fontSize: '10px', fontWeight: 800, padding: '2px 5px', borderRadius: '4px' }}>
+                              🏆 1번
+                            </div>
+                          )}
+                          {isSlot2 && (
+                            <div style={{ position: 'absolute', top: '4px', left: '4px', backgroundColor: '#3b82f6', color: '#fff', fontSize: '10px', fontWeight: 800, padding: '2px 5px', borderRadius: '4px' }}>
+                              🥈 2번
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );

@@ -24,7 +24,8 @@ app.use(
       if (
         origin.startsWith('http://localhost') ||
         origin.endsWith('ybbf.org') ||
-        origin.includes('ybbf')
+        origin.includes('ybbf') ||
+        origin.includes('pages.dev')
       ) {
         return origin;
       }

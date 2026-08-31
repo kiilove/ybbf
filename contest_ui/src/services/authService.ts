@@ -121,52 +121,70 @@ export const authService = {
     }
   },
 
-  // 5. 대회 목록 조회 (Firestore contest_notice 컬렉션에서 가져옴, 용인특례시보디빌딩협회 주최 & 접수중인 대회만 필터링)
+  // 5. 대회 목록 조회 (Firestore contests & contest_notice 컬렉션에서 가져옴, 용인특례시보디빌딩협회 주최 대회 최우선 배치)
   async getContestList(): Promise<SimpleContest[]> {
     try {
-      // 1. contests 컬렉션에서 진행/접수 중인(isCompleted === false) 대회 ID 수집
-      const contestSnap = await getDocs(collection(db, 'contests'));
-      const activeContestIds = new Set<string>();
-      contestSnap.forEach((doc) => {
+      const contestsSnap = await getDocs(collection(db, 'contests'));
+      const contestMap = new Map<string, any>();
+      contestsSnap.forEach((docSnap) => {
+        contestMap.set(docSnap.id, { id: docSnap.id, ...docSnap.data() });
+      });
+
+      const noticeSnap = await getDocs(collection(db, 'contest_notice'));
+      const yonginList: SimpleContest[] = [];
+      const otherList: SimpleContest[] = [];
+      const seenIds = new Set<string>();
+
+      // 1. contest_notice 기반 탐색
+      noticeSnap.forEach((doc) => {
         const data = doc.data();
-        if (data.isCompleted === false) {
-          activeContestIds.add(doc.id);
+        const contestId = data.refContestId || doc.id;
+        if (!contestId || seenIds.has(contestId)) return;
+
+        const cData = contestMap.get(contestId) || {};
+        const promoter = (data.contestPromoter || data.promoter || cData.org || '').trim();
+        const title = (data.contestTitle || cData.contestTitle || cData.collectionName || doc.id).trim();
+
+        const isYongin = 
+          promoter.includes('용인') || 
+          title.includes('용인') || 
+          String(cData.org || '').toLowerCase().trim() === 'ybbf' ||
+          String(cData.collectionName || '').includes('용인');
+
+        const item = { id: contestId, title };
+        seenIds.add(contestId);
+
+        if (isYongin) {
+          yonginList.push(item);
+        } else {
+          otherList.push(item);
         }
       });
 
-      // 2. contest_notice 컬렉션에서 위 수집된 대회 ID에 해당하는 공고 중 주최(contestPromoter)가 '용인특례시보디빌딩협회' 또는 '용인' 포함된 공고만 필터링
-      const querySnapshot = await getDocs(collection(db, 'contest_notice'));
-      const list: SimpleContest[] = [];
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        const promoter = (data.contestPromoter || data.promoter || '').trim();
-        const title = (data.contestTitle || doc.id).trim();
+      // 2. contests 컬렉션에만 존재하는 대회 추가 탐색
+      contestsSnap.forEach((doc) => {
+        const contestId = doc.id;
+        if (seenIds.has(contestId)) return;
 
-        // 용인특례시보디빌딩협회 주최 또는 대회 제목에 '용인'이 포함된 접수 중 대회 필터링
-        const isYonginContest = promoter.includes('용인') || title.includes('용인') || promoter.length === 0;
+        const cData = doc.data();
+        const title = (cData.contestTitle || cData.collectionName || cData.title || doc.id).trim();
+        const isYongin = 
+          title.includes('용인') || 
+          String(cData.org || '').toLowerCase().trim() === 'ybbf' ||
+          String(cData.collectionName || '').includes('용인');
 
-        if (data.refContestId && activeContestIds.has(data.refContestId) && isYonginContest) {
-          list.push({
-            id: data.refContestId,
-            title: title
-          });
+        const item = { id: contestId, title };
+        seenIds.add(contestId);
+
+        if (isYongin) {
+          yonginList.push(item);
+        } else {
+          otherList.push(item);
         }
       });
 
-      // 만약 용인 전용 필터링 건이 없으면 activeContestIds 대상 전체 반환 (폴백)
-      if (list.length === 0 && activeContestIds.size > 0) {
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          if (data.refContestId && activeContestIds.has(data.refContestId)) {
-            list.push({
-              id: data.refContestId,
-              title: data.contestTitle || doc.id
-            });
-          }
-        });
-      }
-
-      return list;
+      // 용인시 대회 1순위(디폴트) 배치 후, 타 협회 대회 배치
+      return [...yonginList, ...otherList];
     } catch (err) {
       console.error('getContestList error:', err);
       return [];

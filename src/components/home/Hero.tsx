@@ -8,6 +8,49 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 gsap.registerPlugin(ScrollTrigger);
 
+// 카테고리 우선순위 정렬 함수 (1. 일반부 -> 2. 비키니 -> 3. 클보 -> 4. 나머지)
+function getHeroCategoryRank(p: any): number {
+  const name = (p.heroName || '').trim();
+  const cls = ((p.heroClass || '') + ' ' + (p.heroTitles || '')).toLowerCase();
+
+  // 1. 일반부 보디빌딩 (강승민 등)
+  if (
+    name.includes('강승민') ||
+    cls.includes('일반부') ||
+    (cls.includes('보디빌딩') && !cls.includes('클래식') && !cls.includes('마스터즈') && !cls.includes('학생부') && !cls.includes('비키니'))
+  ) {
+    return 1;
+  }
+  // 2. 비키니 (김민경 등)
+  if (
+    name.includes('김민경') ||
+    cls.includes('비키니') ||
+    cls.includes('모노키니') ||
+    cls.includes('여자')
+  ) {
+    return 2;
+  }
+  // 3. 클래식 보디빌딩 (유용수 등)
+  if (
+    name.includes('유용수') ||
+    cls.includes('클래식') ||
+    cls.includes('클보')
+  ) {
+    return 3;
+  }
+  // 4. 나머지 (오근석 [남자 스포츠 모델], 김광현 [마스터즈], 한수만 [마스터즈] 등)
+  if (name.includes('오근석') || cls.includes('스포츠 모델')) {
+    return 4;
+  }
+  if (name.includes('김광현')) {
+    return 5;
+  }
+  if (name.includes('한수만')) {
+    return 6;
+  }
+  return 7;
+}
+
 // 다관왕(2관왕 이상) 스마트 통합 및 중복 챔피언 병합 함수
 function formatSmartHeroPlayers(rawList: any[]): any[] {
   const map = new Map<string, any>();
@@ -68,101 +111,13 @@ function formatSmartHeroPlayers(rawList: any[]): any[] {
     }
   });
 
-  return Array.from(map.values());
+  const list = Array.from(map.values());
+  // 1. 일반부 -> 2. 비키니 -> 3. 클보 -> 4. 나머지 순 정렬
+  return list.sort((a, b) => getHeroCategoryRank(a) - getHeroCategoryRank(b));
 }
 
-// 최초 로딩 시 일반부(강승민), 비키니(김민경), 클래식보디빌딩(유용수) 3대 그랑프리 중 1/3 (33.3%) 균등 무작위 선택
-function getPriorityHeroIndex(players: any[]): number {
-  if (!players || players.length === 0) return 0;
-  
-  const priorityNames = ['강승민', '김민경', '유용수'];
-  // 3명 중 무작위 1명 먼저 균등 선택 (1/3 확률)
-  const targetName = priorityNames[Math.floor(Math.random() * priorityNames.length)];
-  
-  const targetIdx = players.findIndex(p => (p.heroName || '').includes(targetName));
-  if (targetIdx >= 0) {
-    return targetIdx;
-  }
-
-  // 예외 시 카테고리 매칭
-  const priorityIndices: number[] = [];
-  players.forEach((p, idx) => {
-    const name = (p.heroName || '').trim();
-    const cls = ((p.heroClass || '') + ' ' + (p.heroTitles || '')).toLowerCase();
-    
-    const isPriority = 
-      name.includes('강승민') || cls.includes('일반부') ||
-      name.includes('김민경') || cls.includes('비키니') ||
-      name.includes('유용수') || cls.includes('클래식');
-      
-    if (isPriority) {
-      priorityIndices.push(idx);
-    }
-  });
-
-  if (priorityIndices.length > 0) {
-    const rand = Math.floor(Math.random() * priorityIndices.length);
-    return priorityIndices[rand];
-  }
-  return 0;
-}
-
-// 가중치 계산 함수 (일반부, 클래식 보디빌딩, 비키니에 기본 1 + 5 = 6 가중치 부여)
-function getHeroWeight(hero: any): number {
-  if (!hero) return 1;
-  const name = hero.heroName || '';
-  const cls = ((hero.heroClass || '') + ' ' + (hero.heroTitles || '')).toLowerCase();
-  
-  // 1. 일반부 보디빌딩 (강승민 등)
-  if (
-    name.includes('강승민') ||
-    cls.includes('일반부') ||
-    (cls.includes('보디빌딩') && !cls.includes('클래식') && !cls.includes('마스터즈') && !cls.includes('학생부'))
-  ) {
-    return 6;
-  }
-  // 2. 클래식 보디빌딩 (유용수 등)
-  if (name.includes('유용수') || cls.includes('클래식')) {
-    return 6;
-  }
-  // 3. 비키니 (김민경 등)
-  if (name.includes('김민경') || cls.includes('비키니') || cls.includes('모노키니') || cls.includes('여자')) {
-    return 6;
-  }
-  return 1;
-}
-
-function getWeightedRandomIndex(players: any[], excludeIndex = -1): number {
-  if (!players || players.length === 0) return 0;
-  if (players.length === 1) return 0;
-
-  const weights = players.map((p, idx) => (idx === excludeIndex ? 0 : getHeroWeight(p)));
-  const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-  
-  if (totalWeight <= 0) return (excludeIndex + 1) % players.length;
-
-  let rand = Math.random() * totalWeight;
-  for (let i = 0; i < players.length; i++) {
-    if (rand < weights[i]) return i;
-    rand -= weights[i];
-  }
-  return 0;
-}
-
-// D1 순서와 100% 동일하게 일치시킨 기본 챔피언 데이터셋
+// 1. 일반부 -> 2. 비키니 -> 3. 클보 -> 4. 나머지 순서로 정의된 기본 챔피언 데이터셋
 const DEFAULT_HERO_PLAYERS = [
-  {
-    id: 'hero-gp-oh-geun-seok',
-    heroName: '오근석',
-    heroClass: '남자 스포츠 모델 (오버롤)',
-    heroHeight: '175',
-    heroWeight: '',
-    heroGym: '피트니스 유 짐',
-    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 남자 스포츠 모델 오버롤 그랑프리 챔피언',
-    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961920111_Athlete_performing_side_chest_pose_202608290905.jpeg',
-    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961928630_Man_striking_bicep_pose_202608290905.jpeg',
-    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961920111_Athlete_performing_side_chest_pose_202608290905.jpeg',
-  },
   {
     id: 'hero-gp-kang-seung-min',
     heroName: '강승민',
@@ -174,18 +129,6 @@ const DEFAULT_HERO_PLAYERS = [
     stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg',
     stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973719285_Athlete_striking_bicep_pose_202608291221.jpeg',
     heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg',
-  },
-  {
-    id: 'hero-gp-kim-gwang-hyun',
-    heroName: '김광현',
-    heroClass: '마스터즈 보디빌딩 (오버롤)',
-    heroHeight: '176',
-    heroWeight: '82',
-    heroGym: '팀 아틀라스',
-    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 마스터즈 보디빌딩 오버롤 그랑프리 챔피언',
-    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799286857_Muscular_man_flexing_abs_2K_202608271143.jpeg',
-    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799278717_Muscular_man_performing_bicep_pose_202608271143.jpeg',
-    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799286857_Muscular_man_flexing_abs_2K_202608271143.jpeg',
   },
   {
     id: 'hero-gp-kim-min-kyeong',
@@ -215,6 +158,30 @@ const DEFAULT_HERO_PLAYERS = [
     heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_a8fc9bfd-da91-4491-973c-e8373f727dea/1787973297495_Athlete_striking_side_chest_pose_202608291214.jpeg',
   },
   {
+    id: 'hero-gp-oh-geun-seok',
+    heroName: '오근석',
+    heroClass: '남자 스포츠 모델 (오버롤)',
+    heroHeight: '175',
+    heroWeight: '',
+    heroGym: '피트니스 유 짐',
+    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 남자 스포츠 모델 오버롤 그랑프리 챔피언',
+    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961920111_Athlete_performing_side_chest_pose_202608290905.jpeg',
+    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961928630_Man_striking_bicep_pose_202608290905.jpeg',
+    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961920111_Athlete_performing_side_chest_pose_202608290905.jpeg',
+  },
+  {
+    id: 'hero-gp-kim-gwang-hyun',
+    heroName: '김광현',
+    heroClass: '마스터즈 보디빌딩 (오버롤)',
+    heroHeight: '176',
+    heroWeight: '82',
+    heroGym: '팀 아틀라스',
+    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 마스터즈 보디빌딩 오버롤 그랑프리 챔피언',
+    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799286857_Muscular_man_flexing_abs_2K_202608271143.jpeg',
+    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799278717_Muscular_man_performing_bicep_pose_202608271143.jpeg',
+    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799286857_Muscular_man_flexing_abs_2K_202608271143.jpeg',
+  },
+  {
     id: 'hero-gp-han-soo-man',
     heroName: '한수만',
     heroClass: '마스터즈 보디빌딩 (오버롤)',
@@ -232,11 +199,9 @@ export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
   const { settings, fetchSettings } = useSettingsStore();
   
-  // 초기 챔피언 및 포즈 선택 (최초 로딩 시 강승민, 김민경, 유용수 3명 중 1/3 균등 무작위 선택)
-  const [selectedHeroIndex, setSelectedHeroIndex] = useState(() => {
-    return getPriorityHeroIndex(DEFAULT_HERO_PLAYERS);
-  });
-  const [activePoseIndex, setActivePoseIndex] = useState(() => (Math.random() > 0.5 ? 1 : 0));
+  // 1번(일반부 강승민)부터 순차적으로 시작
+  const [selectedHeroIndex, setSelectedHeroIndex] = useState(0);
+  const [activePoseIndex, setActivePoseIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false); // 스크롤 진행 여부 (스크롤 시 타이머 정지)
   const [timerKey, setTimerKey] = useState(0); // 10초 타이머 리셋용 키
@@ -278,17 +243,6 @@ export default function Hero() {
     }
   }, [heroPlayers]);
 
-  // 최초 로딩 및 D1 데이터 로드 시 강승민 / 김민경 / 유용수 3명 중 1/3 균등 무작위 선정 보장
-  useEffect(() => {
-    if (heroPlayers.length > 0 && !isRandomized.current) {
-      const randHero = getPriorityHeroIndex(heroPlayers);
-      const randPose = Math.random() > 0.5 ? 1 : 0;
-      setSelectedHeroIndex(randHero);
-      setActivePoseIndex(randPose);
-      isRandomized.current = true;
-    }
-  }, [settings?.heroPlayers, heroPlayers.length]);
-
   const safeIndex = heroPlayers.length > 0 ? (selectedHeroIndex % heroPlayers.length) : 0;
   const currentHero = heroPlayers[safeIndex] || heroPlayers[0] || rawHeroPlayers[0];
 
@@ -300,20 +254,20 @@ export default function Hero() {
 
   const activePhotoUrl = availablePoses[activePoseIndex] || availablePoses[0] || currentHero.heroImageUrl;
 
-  /* ═══ ⏱️ 10초 간격 자동 챔피언 롤링 (가중치 기반 전환) ═══ */
+  /* ═══ ⏱️ 10초 간격 자동 챔피언 롤링 (일반부 -> 비키니 -> 클보 -> 나머지 순환) ═══ */
   const isTimerActive = !isPaused && !isScrolled && heroPlayers.length > 1;
 
   useEffect(() => {
     if (!isTimerActive) return;
 
     const interval = setInterval(() => {
-      setSelectedHeroIndex((prev) => getWeightedRandomIndex(heroPlayers, prev));
+      setSelectedHeroIndex((prev) => (prev + 1) % heroPlayers.length);
       setActivePoseIndex((prev) => (prev === 0 ? 1 : 0));
       setTimerKey((k) => k + 1);
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [isTimerActive, heroPlayers, timerKey]);
+  }, [isTimerActive, heroPlayers.length, timerKey]);
 
   useEffect(() => {
     if (!sectionRef.current) return;

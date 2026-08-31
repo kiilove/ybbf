@@ -109,6 +109,84 @@ function getWeightedRandomIndex(players: any[], excludeIndex = -1): number {
   return 0;
 }
 
+const DEFAULT_HERO_PLAYERS = [
+  {
+    id: 'hero-gp-kang-seung-min',
+    heroName: '강승민',
+    heroClass: '일반부 보디빌딩 (오버롤)',
+    heroHeight: '174',
+    heroWeight: '87.5',
+    heroGym: '무소속',
+    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 일반부 보디빌딩 오버롤 그랑프리 챔피언',
+    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg',
+    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973719285_Athlete_striking_bicep_pose_202608291221.jpeg',
+    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg',
+  },
+  {
+    id: 'hero-gp-kim-min-kyeong',
+    heroName: '김민경',
+    heroClass: '비키니 · 스포츠 모델 (2관왕)',
+    heroHeight: '',
+    heroWeight: '',
+    heroGym: '단단짐',
+    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 비키니 & 스포츠 모델 2관왕 오버롤 그랑프리',
+    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_0eee94b4-a403-4376-bf39-1d192c790e1a/1787805097349_Female_athlete_posing_with_skate…_202608271331.jpeg',
+    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_0eee94b4-a403-4376-bf39-1d192c790e1a/1787805673713_Athlete_holding_skateboard_2K_202608271340.jpeg',
+    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_0eee94b4-a403-4376-bf39-1d192c790e1a/1787805097349_Female_athlete_posing_with_skate…_202608271331.jpeg',
+    isMultiCrown: true,
+    crownCount: 2,
+    crownBadge: '👑 2관왕'
+  },
+  {
+    id: 'hero-gp-yoo-yong-soo',
+    heroName: '유용수',
+    heroClass: '클래식 보디빌딩 (오버롤)',
+    heroHeight: '178',
+    heroWeight: '80',
+    heroGym: '바디홀릭',
+    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 클래식 보디빌딩 오버롤 그랑프리 챔피언',
+    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_a8fc9bfd-da91-4491-973c-e8373f727dea/1787973297495_Athlete_striking_side_chest_pose_202608291214.jpeg',
+    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_a8fc9bfd-da91-4491-973c-e8373f727dea/1787973305284_Athlete_striking_bicep_pose_202608291214.jpeg',
+    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_a8fc9bfd-da91-4491-973c-e8373f727dea/1787973297495_Athlete_striking_side_chest_pose_202608291214.jpeg',
+  },
+  {
+    id: 'hero-gp-oh-geun-seok',
+    heroName: '오근석',
+    heroClass: '남자 스포츠 모델 (오버롤)',
+    heroHeight: '175',
+    heroWeight: '',
+    heroGym: '피트니스 유 짐',
+    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 남자 스포츠 모델 오버롤 그랑프리 챔피언',
+    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961920111_Athlete_performing_side_chest_pose_202608290905.jpeg',
+    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961928630_Man_striking_bicep_pose_202608290905.jpeg',
+    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961920111_Athlete_performing_side_chest_pose_202608290905.jpeg',
+  },
+  {
+    id: 'hero-gp-kim-gwang-hyun',
+    heroName: '김광현',
+    heroClass: '마스터즈 보디빌딩 (오버롤)',
+    heroHeight: '176',
+    heroWeight: '82',
+    heroGym: '팀 아틀라스',
+    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 마스터즈 보디빌딩 오버롤 그랑프리 챔피언',
+    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799286857_Muscular_man_flexing_abs_2K_202608271143.jpeg',
+    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799278717_Muscular_man_performing_bicep_pose_202608271143.jpeg',
+    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799286857_Muscular_man_flexing_abs_2K_202608271143.jpeg',
+  },
+  {
+    id: 'hero-gp-han-soo-man',
+    heroName: '한수만',
+    heroClass: '마스터즈 보디빌딩 (오버롤)',
+    heroHeight: '173',
+    heroWeight: '',
+    heroGym: '마들짐',
+    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 마스터즈 보디빌딩 오버롤 그랑프리 챔피언',
+    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_8d58b957-cc21-4bf3-afed-6db41eeccd73/1787803994966_Bodybuilder_performing_side_ches…_2K_202608271312.jpeg',
+    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_8d58b957-cc21-4bf3-afed-6db41eeccd73/1787804001699_Bodybuilder_performing_double-bi…_2K_202608271312.jpeg',
+    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_8d58b957-cc21-4bf3-afed-6db41eeccd73/1787803994966_Bodybuilder_performing_side_ches…_2K_202608271312.jpeg',
+  }
+];
+
 export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
   const { settings, fetchSettings } = useSettingsStore();
@@ -135,23 +213,27 @@ export default function Hero() {
 
   const rawHeroPlayers = (settings?.heroPlayers && settings.heroPlayers.length > 0) 
     ? settings.heroPlayers 
-    : [
-        {
-          id: 'hero-gp-kang-seung-min',
-          heroName: '강승민',
-          heroClass: '일반부 보디빌딩 (오버롤)',
-          heroHeight: '174',
-          heroWeight: '87.5',
-          heroGym: '무소속',
-          heroTitles: '2026 제9회 용인특례시 보디빌딩대회 일반부 보디빌딩 오버롤 그랑프리 챔피언',
-          stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg',
-          stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973719285_Athlete_striking_bicep_pose_202608291221.jpeg',
-          heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg',
-        }
-      ];
+    : DEFAULT_HERO_PLAYERS;
 
   // 스마트 다관왕 통합 및 사진 있는 유효 챔피언 선별
   const heroPlayers = formatSmartHeroPlayers(rawHeroPlayers);
+
+  // ⚡ 모든 챔피언 사진 브라우저 및 GPU 메모리 선행 프리로드 (롤링/전환 시 0ms 즉시 노출)
+  useEffect(() => {
+    if (heroPlayers.length > 0) {
+      heroPlayers.forEach((player) => {
+        const urls = [player.stagePhoto1, player.stagePhoto2, player.heroImageUrl].filter(Boolean);
+        urls.forEach((url) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.src = url;
+          if ('decode' in img) {
+            img.decode().catch(() => {});
+          }
+        });
+      });
+    }
+  }, [heroPlayers]);
 
   // D1 로드 시 일반부/클래식/비키니에 5배 가중치를 부여한 가중치 랜덤으로 초기 선택
   useEffect(() => {

@@ -1211,7 +1211,7 @@ app.post('/api/register', async (c) => {
     const {
       id, playerUid, playerName, playerGender, playerBirth, playerTel,
       playerEmail, playerGym, playerText, playerPhotoUrl, playerPhotoUrls, selectedPhotoUrls,
-      stagePhoto1, stagePhoto2, playerService,
+      stagePhoto1, stagePhoto2, publicStagePhoto1, publicStagePhoto2, publicPhotoUrls, playerService,
       joins, contestPriceSum, contestPriceTotal, playerAge, isPriceCheck,
       isCanceled, invoiceEdited, createBy, invoiceCreateAt, invoiceEditAt, contestId, submittedAt
     } = payload;
@@ -1244,16 +1244,25 @@ app.post('/api/register', async (c) => {
     const finalStagePhoto2 = stagePhoto2 || selectedUrlsArr[1] || null;
     const selectedUrlsStr = JSON.stringify([finalStagePhoto1 || '', finalStagePhoto2 || '']);
 
+    let publicPhotoUrlsStr = '[]';
+    if (Array.isArray(publicPhotoUrls)) {
+      publicPhotoUrlsStr = JSON.stringify(publicPhotoUrls);
+    } else if (typeof publicPhotoUrls === 'string') {
+      publicPhotoUrlsStr = publicPhotoUrls;
+    } else if (payload.publicPhotoUrlsJson) {
+      publicPhotoUrlsStr = typeof payload.publicPhotoUrlsJson === 'string' ? payload.publicPhotoUrlsJson : JSON.stringify(payload.publicPhotoUrlsJson);
+    }
+
     await ensureInvoicesPoolColumns(c.env.DB);
 
     await c.env.DB.prepare(`
       INSERT OR REPLACE INTO invoices_pool (
         id, playerUid, playerName, playerGender, playerBirth, playerTel,
         playerEmail, playerGym, playerText, playerPhotoUrl, playerPhotoUrls, selectedPhotoUrls,
-        stagePhoto1, stagePhoto2, playerService,
+        stagePhoto1, stagePhoto2, publicStagePhoto1, publicStagePhoto2, publicPhotoUrls, playerService,
         joins, contestPriceSum, contestPriceTotal, playerAge, isPriceCheck,
         isCanceled, invoiceEdited, createBy, invoiceCreateAt, invoiceEditAt, contestId, submittedAt
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       id, playerUid, playerName, playerGender, playerBirth, playerTel,
       playerEmail || null, playerGym, playerText || null, playerPhotoUrl || null,
@@ -1261,6 +1270,9 @@ app.post('/api/register', async (c) => {
       selectedUrlsStr,
       finalStagePhoto1,
       finalStagePhoto2,
+      publicStagePhoto1 || null,
+      publicStagePhoto2 || null,
+      publicPhotoUrlsStr,
       playerService ? 1 : 0,
       typeof joins === 'string' ? joins : JSON.stringify(joins || []),
       contestPriceSum, contestPriceTotal, playerAge || null, isPriceCheck ? 1 : 0,

@@ -354,43 +354,87 @@ async function enrichInvoiceWithContestData(invoice: RegistrationPayload): Promi
   return result;
 }
 
-// 7. 단일 선수 쇼케이스 인보이스 조회 (D1 우선 조회 & Firestore fallback 지원)
+// 7. 단일 선수 쇼케이스 인보이스 조회 (D1 우선 조회 & Firestore 브랜딩 사진/성적 실시간 병합 보강)
 export async function getInvoiceByIdOrPlayerUid(idOrUid: string): Promise<RegistrationPayload | null> {
   if (!idOrUid) return null;
 
-  // 0) Cloudflare D1 공식 인보이스 및 공식 심사 결과 조회 우선 (실시간 성적 & 사진)
+  let baseInvoice: RegistrationPayload | null = null;
+
+  // 0) Cloudflare D1 공식 인보이스 및 공식 심사 결과 조회 (실시간 성적 & 사진)
   try {
     const res = await fetch(`https://ybbf-api-worker.jbkim.workers.dev/api/invoices/showcase/${encodeURIComponent(idOrUid)}`);
     if (res.ok) {
       const json = await res.json();
       if (json.success && json.invoice) {
-        return json.invoice as RegistrationPayload;
+        baseInvoice = json.invoice as RegistrationPayload;
       }
     }
   } catch (err) {
-    // continue to Firestore fallback
+    // continue to Firestore
   }
 
-  // 1) invoices_pool 직접 문서 ID로 조회
+  // 1) Firestore에서 브랜딩 사진 (publicStagePhoto1, 2) 및 원천 데이터 실시간 병합 (마이페이지와 동일 소스)
   try {
-    const docRef = doc(db, 'invoices_pool', idOrUid);
+    const targetId = baseInvoice?.id || idOrUid;
+    const docRef = doc(db, 'invoices_pool', targetId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-      const data = docSnap.data();
-      let photoUrls = data.playerPhotoUrls || [];
-      if ((!photoUrls || photoUrls.length === 0) && data.playerPhotoUrlsJson) {
-        try {
-          photoUrls = JSON.parse(data.playerPhotoUrlsJson);
-        } catch (e) {}
+      const fsData = docSnap.data();
+      let photoUrls = fsData.playerPhotoUrls || [];
+      if ((!photoUrls || photoUrls.length === 0) && fsData.playerPhotoUrlsJson) {
+        try { photoUrls = JSON.parse(fsData.playerPhotoUrlsJson); } catch (e) {}
       }
-      const rawPayload = { id: docSnap.id, ...data, playerPhotoUrls: photoUrls } as RegistrationPayload;
-      return await enrichInvoiceWithContestData(rawPayload);
+
+      if (baseInvoice) {
+        return {
+          ...baseInvoice,
+          publicStagePhoto1: fsData.publicStagePhoto1 || baseInvoice.publicStagePhoto1 || '',
+          publicStagePhoto2: fsData.publicStagePhoto2 || baseInvoice.publicStagePhoto2 || '',
+          stagePhoto1: fsData.stagePhoto1 || baseInvoice.stagePhoto1 || '',
+          stagePhoto2: fsData.stagePhoto2 || baseInvoice.stagePhoto2 || '',
+          playerPhotoUrls: (photoUrls.length > 0) ? photoUrls : baseInvoice.playerPhotoUrls
+        };
+      } else {
+        const rawPayload = { id: docSnap.id, ...fsData, playerPhotoUrls: photoUrls } as RegistrationPayload;
+        return await enrichInvoiceWithContestData(rawPayload);
+      }
     }
   } catch (err) {
     // continue
   }
 
-  // 2) invoices 컬렉션 직접 문서 ID로 조회
+  // 2) playerUid 쿼리 조회 (invoices_pool)
+  try {
+    const targetUid = baseInvoice?.playerUid || idOrUid;
+    const q1 = query(collection(db, 'invoices_pool'), where('playerUid', '==', targetUid));
+    const snap1 = await getDocs(q1);
+    if (!snap1.empty) {
+      const docItem = snap1.docs[0];
+      const fsData = docItem.data();
+      let photoUrls = fsData.playerPhotoUrls || [];
+      if ((!photoUrls || photoUrls.length === 0) && fsData.playerPhotoUrlsJson) {
+        try { photoUrls = JSON.parse(fsData.playerPhotoUrlsJson); } catch (e) {}
+      }
+
+      if (baseInvoice) {
+        return {
+          ...baseInvoice,
+          publicStagePhoto1: fsData.publicStagePhoto1 || baseInvoice.publicStagePhoto1 || '',
+          publicStagePhoto2: fsData.publicStagePhoto2 || baseInvoice.publicStagePhoto2 || '',
+          stagePhoto1: fsData.stagePhoto1 || baseInvoice.stagePhoto1 || '',
+          stagePhoto2: fsData.stagePhoto2 || baseInvoice.stagePhoto2 || '',
+          playerPhotoUrls: (photoUrls.length > 0) ? photoUrls : baseInvoice.playerPhotoUrls
+        };
+      } else {
+        const rawPayload = { id: docItem.id, ...fsData, playerPhotoUrls: photoUrls } as RegistrationPayload;
+        return await enrichInvoiceWithContestData(rawPayload);
+      }
+    }
+  } catch (err) {
+    // continue
+  }
+
+  // 3) invoices 컬렉션 직접 문서 ID로 조회 (구버전 fallback)
   try {
     const docRef = doc(db, 'invoices', idOrUid);
     const docSnap = await getDoc(docRef);
@@ -398,9 +442,7 @@ export async function getInvoiceByIdOrPlayerUid(idOrUid: string): Promise<Regist
       const data = docSnap.data();
       let photoUrls = data.playerPhotoUrls || [];
       if ((!photoUrls || photoUrls.length === 0) && data.playerPhotoUrlsJson) {
-        try {
-          photoUrls = JSON.parse(data.playerPhotoUrlsJson);
-        } catch (e) {}
+        try { photoUrls = JSON.parse(data.playerPhotoUrlsJson); } catch (e) {}
       }
       const rawPayload = { id: docSnap.id, ...data, playerPhotoUrls: photoUrls } as RegistrationPayload;
       return await enrichInvoiceWithContestData(rawPayload);
@@ -409,47 +451,7 @@ export async function getInvoiceByIdOrPlayerUid(idOrUid: string): Promise<Regist
     // continue
   }
 
-  // 3) playerUid 쿼리 조회 (invoices_pool)
-  try {
-    const q1 = query(collection(db, 'invoices_pool'), where('playerUid', '==', idOrUid));
-    const snap1 = await getDocs(q1);
-    if (!snap1.empty) {
-      const docItem = snap1.docs[0];
-      const data = docItem.data();
-      let photoUrls = data.playerPhotoUrls || [];
-      if ((!photoUrls || photoUrls.length === 0) && data.playerPhotoUrlsJson) {
-        try {
-          photoUrls = JSON.parse(data.playerPhotoUrlsJson);
-        } catch (e) {}
-      }
-      const rawPayload = { id: docItem.id, ...data, playerPhotoUrls: photoUrls } as RegistrationPayload;
-      return await enrichInvoiceWithContestData(rawPayload);
-    }
-  } catch (err) {
-    // continue
-  }
-
-  // 4) createBy 쿼리 조회
-  try {
-    const q2 = query(collection(db, 'invoices_pool'), where('createBy', '==', idOrUid));
-    const snap2 = await getDocs(q2);
-    if (!snap2.empty) {
-      const docItem = snap2.docs[0];
-      const data = docItem.data();
-      let photoUrls = data.playerPhotoUrls || [];
-      if ((!photoUrls || photoUrls.length === 0) && data.playerPhotoUrlsJson) {
-        try {
-          photoUrls = JSON.parse(data.playerPhotoUrlsJson);
-        } catch (e) {}
-      }
-      const rawPayload = { id: docItem.id, ...data, playerPhotoUrls: photoUrls } as RegistrationPayload;
-      return await enrichInvoiceWithContestData(rawPayload);
-    }
-  } catch (err) {
-    // continue
-  }
-
-  // 5) playerName 쿼리 조회 (선수 이름으로도 쇼케이스 열기 지원)
+  // 4) playerName 쿼리 조회 (선수 이름으로도 쇼케이스 열기 지원)
   try {
     const cleanName = decodeURIComponent(idOrUid).trim().replace(/^(champ-|legend-|youth-\d+-|youth-)/, '');
     const q3 = query(collection(db, 'invoices_pool'), where('playerName', '==', cleanName));
@@ -459,9 +461,7 @@ export async function getInvoiceByIdOrPlayerUid(idOrUid: string): Promise<Regist
       const data = docItem.data();
       let photoUrls = data.playerPhotoUrls || [];
       if ((!photoUrls || photoUrls.length === 0) && data.playerPhotoUrlsJson) {
-        try {
-          photoUrls = JSON.parse(data.playerPhotoUrlsJson);
-        } catch (e) {}
+        try { photoUrls = JSON.parse(data.playerPhotoUrlsJson); } catch (e) {}
       }
       const rawPayload = { id: docItem.id, ...data, playerPhotoUrls: photoUrls } as RegistrationPayload;
       return await enrichInvoiceWithContestData(rawPayload);
@@ -470,7 +470,7 @@ export async function getInvoiceByIdOrPlayerUid(idOrUid: string): Promise<Regist
     // continue
   }
 
-  return null;
+  return baseInvoice;
 }
 
 // 8. 쇼케이스 SNS 인터랙션 (Reactions & Comments)

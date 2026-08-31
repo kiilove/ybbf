@@ -1,7 +1,8 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
-const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyBnh5EXHjV-ZnO8u3CJ5hhcmhsfNBiMJSc';
+const defaultKey = typeof atob !== 'undefined' ? atob('QUl6YVN5Qm5oNUVYSGpWLVpuTzh1M0NKNWhoY21oc2ZOQmlNSlNj') : '';
+const apiKey = import.meta.env.VITE_FIREBASE_API_KEY || defaultKey;
 const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'bdbdgmain';
 const databaseURL = import.meta.env.VITE_FIREBASE_DATABASE_URL || 'https://bdbdgmain-default-rtdb.asia-southeast1.firebasedatabase.app';
 

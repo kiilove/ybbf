@@ -148,6 +148,39 @@ export default function PlayerShowcasePage() {
     loadPlayer();
   }, [id]);
 
+  // 선수 정보 로드 시 브라우저 타이틀 및 SNS OpenGraph 메타 태그 맞춤형 동적 업데이트
+  useEffect(() => {
+    if (player) {
+      const playerName = (player.playerName || '선수').trim();
+      const gym = player.playerGym ? `${player.playerGym} 소속 · ` : '';
+      const title = `[YBBF] ${playerName} 선수 공식 무대 쇼케이스 | 용인시보디빌딩협회`;
+      const desc = `${playerName} 선수(${gym}2026 제9회 용인특례시 협회장배)의 공식 무대 화보 및 출전 기록을 확인하고 응원해 보세요! 🏆✨`;
+      const photo = player.publicStagePhoto1 || player.stagePhoto1 || (player.playerPhotoUrls && player.playerPhotoUrls[0]) || player.playerPhotoUrl || 'https://ybbf.org/hero_section.png';
+
+      document.title = title;
+
+      const setMeta = (nameOrProp: string, content: string, isProp = false) => {
+        let el = document.querySelector(isProp ? `meta[property="${nameOrProp}"]` : `meta[name="${nameOrProp}"]`);
+        if (!el) {
+          el = document.createElement('meta');
+          if (isProp) el.setAttribute('property', nameOrProp);
+          else el.setAttribute('name', nameOrProp);
+          document.head.appendChild(el);
+        }
+        el.setAttribute('content', content);
+      };
+
+      setMeta('description', desc);
+      setMeta('og:title', `[YBBF] ${playerName} 선수 공식 무대 쇼케이스`, true);
+      setMeta('og:description', desc, true);
+      setMeta('og:image', photo, true);
+      setMeta('og:url', window.location.href, true);
+      setMeta('twitter:title', `[YBBF] ${playerName} 선수 공식 무대 쇼케이스`);
+      setMeta('twitter:description', desc);
+      setMeta('twitter:image', photo);
+    }
+  }, [player]);
+
   // 응원하기 버튼 핸들러
   const handleCheer = async () => {
     if (!player?.id) return;

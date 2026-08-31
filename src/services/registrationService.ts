@@ -500,7 +500,7 @@ export async function reactShowcase(
   reaction: ShowcaseReactionType
 ): Promise<ShowcaseReactions> {
   const localKey = `ybbf_reactions_${invoiceId}`;
-  let currentReactions: ShowcaseReactions = { heart: 12, fire: 8, clap: 15, trophy: 5 };
+  let currentReactions: ShowcaseReactions = { heart: 0, fire: 0, clap: 0, trophy: 0 };
   try {
     const saved = localStorage.getItem(localKey);
     if (saved) currentReactions = JSON.parse(saved);
@@ -514,7 +514,7 @@ export async function reactShowcase(
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const data = snap.data();
-      const firestoreReactions = data.reactions || { heart: data.cheerCount || 12, fire: 8, clap: 15, trophy: 5 };
+      const firestoreReactions = data.reactions || { heart: data.cheerCount || 0, fire: 0, clap: 0, trophy: 0 };
       firestoreReactions[reaction] = (firestoreReactions[reaction] || 0) + 1;
       await setDoc(docRef, { reactions: firestoreReactions, cheerCount: firestoreReactions.heart }, { merge: true });
       return firestoreReactions;
@@ -534,7 +534,7 @@ export async function getShowcaseReactions(invoiceId: string): Promise<ShowcaseR
     if (snap.exists()) {
       const data = snap.data();
       if (data.reactions) return data.reactions;
-      if (data.cheerCount) return { heart: data.cheerCount, fire: 8, clap: 15, trophy: 5 };
+      if (data.cheerCount) return { heart: data.cheerCount, fire: 0, clap: 0, trophy: 0 };
     }
   } catch {}
 
@@ -544,7 +544,7 @@ export async function getShowcaseReactions(invoiceId: string): Promise<ShowcaseR
     if (saved) return JSON.parse(saved);
   } catch {}
 
-  return { heart: 18, fire: 12, clap: 24, trophy: 7 };
+  return { heart: 0, fire: 0, clap: 0, trophy: 0 };
 }
 
 // 8-3. 쇼케이스 댓글 목록 조회

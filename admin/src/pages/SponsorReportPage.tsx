@@ -8,6 +8,7 @@ import {
   Film, Award, Globe, ArrowLeft, Info, Edit3
 } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { getMainSiteUrl } from '../constants/urls';
 
 const TAG_STYLES: Record<string, { label: string; color: string; bg: string }> = {
   DIAMOND: { label: 'DIAMOND 💎 (최상위 공식 메인 스폰서)', color: '#0369a1', bg: '#e0f2fe' },
@@ -395,7 +396,7 @@ export default function SponsorReportPage() {
                 </button>
 
                 <a
-                  href={`http://localhost:4100/sponsors`}
+                  href={`${getMainSiteUrl()}/sponsors`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{

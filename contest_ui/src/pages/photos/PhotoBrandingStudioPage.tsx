@@ -17,6 +17,7 @@ import {
 } from '../../utils/watermarkEngine';
 import { uploadToR2, deleteFromR2 } from '../../services/uploadToR2Service';
 import { processSinglePlayerStagePhotos } from '../../services/batchWatermarkService';
+import { getMainSiteUrl } from '../../constants/urls';
 
 export default function PhotoBrandingStudioPage() {
   const [searchParams] = useSearchParams();
@@ -253,7 +254,7 @@ export default function PhotoBrandingStudioPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {currentRegistration && (
             <a
-              href={`http://localhost:4100/mypage?previewUid=${encodeURIComponent(currentRegistration.playerUid || currentRegistration.id)}`}
+              href={`${getMainSiteUrl()}/mypage?previewUid=${encodeURIComponent(currentRegistration.playerUid || currentRegistration.id)}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{

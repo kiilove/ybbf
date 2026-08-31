@@ -14,6 +14,7 @@ import type {
   AdminContestItem, 
   OfficialCategoryResult 
 } from '../services/contestAdminService';
+import { getMainSiteUrl } from '../constants/urls';
 
 const CONTEST_STATUS_OPTIONS = [
   { label: '대회 접수중', value: '접수중' },
@@ -617,7 +618,7 @@ export default function ContestResultsManagerPage() {
                               {/* 6. 쇼케이스 */}
                               <td style={{ padding: '8px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                                 <a
-                                  href={`http://localhost:4100/showcase/${encodeURIComponent(r.playerUid || r.playerNumber)}`}
+                                  href={`${getMainSiteUrl()}/showcase/${encodeURIComponent(r.playerUid || r.playerNumber)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   style={{

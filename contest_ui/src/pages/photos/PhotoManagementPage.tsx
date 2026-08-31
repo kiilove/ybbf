@@ -3,17 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useContest } from '../../hooks/useContest';
 import { authService } from '../../services/authService';
-import { contestService } from '../../services/contestService';
 import type { Registration } from '../../services/contestService';
 import type { SimpleContest } from '../../services/authService';
 import { 
   Camera, Upload, Download, CheckCircle2, AlertCircle, 
   Search, ChevronDown, ChevronRight, X, Trash2, Eye, RefreshCw,
-  Plus, ExternalLink, Trophy, Sparkles
+  Plus, ExternalLink, Sparkles
 } from 'lucide-react';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import { uploadToR2 } from '../../services/uploadToR2Service';
 import { batchProcessAllStagePhotos, resetAllPublicStagePhotos } from '../../services/batchWatermarkService';
+import { getMainSiteUrl } from '../../constants/urls';
 
 interface CategoryGroup {
   categoryTitle: string;
@@ -172,63 +172,6 @@ export default function PhotoManagementPage() {
         }
       }
     });
-  };
-
-  // 🏆 개별 선수 출전 종목 성적 및 순위 변경
-  const handleUpdateJoinRank = async (regId: string, joinIdx: number, awardValue: string) => {
-    const reg = registrations.find(r => r.id === regId);
-    if (!reg) return;
-
-    const newJoins = [...(reg.joins || [])];
-    if (!newJoins[joinIdx]) return;
-
-    let rankNum: number | undefined = undefined;
-    let isGp = false;
-
-    if (awardValue === '기본') {
-      newJoins[joinIdx] = {
-        ...newJoins[joinIdx],
-        rank: undefined,
-        award: undefined,
-        isGrandPrix: false
-      };
-    } else {
-      if (awardValue.includes('1위') || awardValue.includes('체급 우승')) rankNum = 1;
-      if (awardValue.includes('2위')) rankNum = 2;
-      if (awardValue.includes('3위')) rankNum = 3;
-      if (awardValue.includes('TOP 5')) rankNum = 4;
-      if (awardValue.includes('그랑프리')) {
-        rankNum = 1;
-        isGp = true;
-      }
-
-      newJoins[joinIdx] = {
-        ...newJoins[joinIdx],
-        rank: rankNum,
-        award: awardValue,
-        isGrandPrix: isGp
-      };
-    }
-
-    try {
-      await contestService.updatePlayerJoinResults(regId, newJoins, isGp ? '그랑프리 우승 (OVERALL CHAMPION)' : undefined);
-      fetchList();
-    } catch (err: any) {
-      alert('성적 저장 오류: ' + (err.message || err));
-    }
-  };
-
-  // 🏆 대회 공식 성적 일괄 동기화 알림/실행
-  const handleSyncContestAwards = async () => {
-    if (!window.confirm('대회 채점 심사 데이터에서 순위(체급 우승, 그랑프리, 입상)를 가져와 모든 선수 쇼케이스와 마이페이지에 실시간 반영하시겠습니까?')) {
-      return;
-    }
-    try {
-      await fetchList();
-      alert('✨ 대회 성적 및 순위가 쇼케이스와 마이페이지에 실시간 동기화되었습니다!');
-    } catch (err: any) {
-      alert('동기화 실패: ' + err.message);
-    }
   };
 
   // Load contest list if staff has no fixed contestId
@@ -553,31 +496,6 @@ export default function PhotoManagementPage() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* 대회 성적 실시간 동기화 버튼 */}
-          <button
-            onClick={handleSyncContestAwards}
-            disabled={isLoading}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '10px 16px',
-              backgroundColor: 'rgba(234, 179, 8, 0.15)',
-              border: '1px solid rgba(234, 179, 8, 0.4)',
-              borderRadius: '10px',
-              color: '#facc15',
-              fontSize: '13px',
-              fontWeight: 800,
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(234, 179, 8, 0.15)',
-              transition: 'all 0.2s ease'
-            }}
-            title="대회 심사 결과의 순위/성적을 모든 선수 쇼케이스와 마이페이지에 실시간 동기화합니다"
-          >
-            <Trophy size={16} />
-            대회 성적 및 순위 동기화
-          </button>
-
           {/* 전체 선수 일괄 자동 브랜딩 버튼 */}
           <button
             onClick={handleRunBatchBranding}
@@ -921,7 +839,7 @@ export default function PhotoManagementPage() {
                                         {/* Photo Status & MyPage Preview Links */}
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                           <a
-                                            href={`http://localhost:4100/showcase/${encodeURIComponent(reg.id || reg.playerUid || '')}`}
+                                            href={`${getMainSiteUrl()}/showcase/${encodeURIComponent(reg.id || reg.playerUid || '')}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             style={{
@@ -943,7 +861,7 @@ export default function PhotoManagementPage() {
                                             <ExternalLink size={12} /> 공개 쇼케이스
                                           </a>
                                           <a
-                                            href={`http://localhost:4100/mypage?previewUid=${encodeURIComponent(reg.playerUid || reg.id)}`}
+                                            href={`${getMainSiteUrl()}/mypage?previewUid=${encodeURIComponent(reg.playerUid || reg.id)}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             style={{
@@ -1039,60 +957,6 @@ export default function PhotoManagementPage() {
                                             🌐 공개용 2번 완료
                                           </span>
                                         ) : null}
-                                      </div>
-
-                                      {/* 🏆 대회 공식 성적 & 입상 순위 관리 바 */}
-                                      <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
-                                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                          <Trophy size={13} color="#d2ff00" /> 출전 종목별 대회 성적 / 순위 부여:
-                                        </div>
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                          {(reg.joins || []).map((join, joinIdx) => {
-                                            const currentAward = join.award || (join.rank ? `${join.rank}위` : '기본');
-                                            const isChamp = currentAward.includes('우승') || currentAward.includes('그랑프리');
-
-                                            return (
-                                              <div 
-                                                key={joinIdx} 
-                                                style={{ 
-                                                  display: 'flex', 
-                                                  alignItems: 'center', 
-                                                  justifyContent: 'space-between', 
-                                                  backgroundColor: '#0f172a', 
-                                                  padding: '6px 10px', 
-                                                  borderRadius: '8px', 
-                                                  border: isChamp ? '1px solid rgba(210, 255, 0, 0.35)' : '1px solid rgba(255, 255, 255, 0.06)' 
-                                                }}
-                                              >
-                                                <span style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0' }}>
-                                                  {join.contestCategoryTitle} <span style={{ color: '#d2ff00', fontSize: '10px', fontWeight: 700 }}>({join.contestGradeTitle})</span>
-                                                </span>
-                                                <select
-                                                  value={currentAward}
-                                                  onChange={(e) => handleUpdateJoinRank(reg.id, joinIdx, e.target.value)}
-                                                  style={{
-                                                    backgroundColor: isChamp ? 'rgba(210, 255, 0, 0.15)' : '#1e293b',
-                                                    color: isChamp ? '#d2ff00' : '#f8fafc',
-                                                    border: isChamp ? '1px solid #d2ff00' : '1px solid rgba(255, 255, 255, 0.15)',
-                                                    borderRadius: '6px',
-                                                    padding: '3px 8px',
-                                                    fontSize: '11px',
-                                                    fontWeight: 700,
-                                                    cursor: 'pointer',
-                                                    outline: 'none'
-                                                  }}
-                                                >
-                                                  <option value="기본">⚡ 본선 진출 (기본)</option>
-                                                  <option value="체급 우승 (1위)">🥇 1위 (체급 우승)</option>
-                                                  <option value="그랑프리 우승 (Grand Prix)">👑 그랑프리 우승 (Grand Prix)</option>
-                                                  <option value="2위 (준우승)">🥈 2위 (준우승)</option>
-                                                  <option value="3위 (입상)">🥉 3위 (입상)</option>
-                                                  <option value="TOP 5 (공식 입상)">🎖️ TOP 5 (공식 입상)</option>
-                                                </select>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
                                       </div>
                                     </div>
 

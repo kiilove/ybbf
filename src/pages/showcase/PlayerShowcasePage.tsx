@@ -6,8 +6,6 @@ import {
   Heart, 
   ExternalLink, 
   ChevronRight, 
-  Copy, 
-  Check, 
   Building, 
   Calendar, 
   MapPin, 
@@ -17,10 +15,8 @@ import {
   MessageCircle,
   Bookmark,
   Send,
-  Sparkles,
-  Crown,
-  Medal,
-  CheckCircle2
+  CheckCircle2,
+  Maximize2
 } from 'lucide-react';
 import { getInvoiceByIdOrPlayerUid, cheerShowcase } from '../../services/registrationService';
 import { RegistrationPayload, JoinItem } from '../../types/registration';
@@ -38,7 +34,8 @@ function getRankBadgeInfo(rank?: number | string, award?: string) {
   // 1. 오버롤 그랑프리
   if (a.includes('그랑프리') || a.includes('OVERALL') || a.includes('대상') || a.includes('Grand Prix')) {
     return {
-      text: '👑 OVERALL GRAND PRIX • 그랑프리 우승',
+      title: 'OVERALL GRAND PRIX',
+      subtitle: '그랑프리 우승 (오버롤)',
       badgeClass: 'bg-gradient-to-r from-yellow-300 via-amber-400 to-yellow-500 text-black border-yellow-200 shadow-lg shadow-yellow-400/30 font-black',
       icon: '👑',
       isChampion: true,
@@ -49,7 +46,8 @@ function getRankBadgeInfo(rank?: number | string, award?: string) {
   // 2. 1위 우승
   if (r === '1' || a === '1위' || a.startsWith('1위') || a === '우승') {
     return {
-      text: '🥇 1ST PLACE • 1위 우승 (CHAMPION)',
+      title: '1ST PLACE',
+      subtitle: '1위 우승 (CHAMPION)',
       badgeClass: 'bg-gradient-to-r from-amber-400 to-yellow-500 text-black border-amber-300 shadow-md shadow-amber-500/30 font-black',
       icon: '🥇',
       isChampion: true,
@@ -60,7 +58,8 @@ function getRankBadgeInfo(rank?: number | string, award?: string) {
   // 3. 2위 준우승
   if (r === '2' || a === '2위' || a.startsWith('2위') || a.includes('준우승')) {
     return {
-      text: '🥈 2ND PLACE • 2위 준우승',
+      title: '2ND PLACE',
+      subtitle: '2위 준우승',
       badgeClass: 'bg-gradient-to-r from-slate-200 to-gray-300 text-black border-slate-200 shadow-md shadow-slate-300/20 font-black',
       icon: '🥈',
       isChampion: false,
@@ -71,7 +70,8 @@ function getRankBadgeInfo(rank?: number | string, award?: string) {
   // 4. 3위 입상
   if (r === '3' || a === '3위' || a.startsWith('3위')) {
     return {
-      text: '🥉 3RD PLACE • 3위 입상',
+      title: '3RD PLACE',
+      subtitle: '3위 입상',
       badgeClass: 'bg-gradient-to-r from-amber-700 to-yellow-700 text-white border-amber-600 shadow-md font-black',
       icon: '🥉',
       isChampion: false,
@@ -82,7 +82,8 @@ function getRankBadgeInfo(rank?: number | string, award?: string) {
   // 5. 4~6위
   if (r === '4' || r === '5' || r === '6' || a.includes('TOP') || a.includes('입상') || a.includes('장려상')) {
     return {
-      text: `🎖️ FINALIST • TOP ${r || '5'} 공식 입상`,
+      title: `TOP ${r || '5'} FINALIST`,
+      subtitle: `${r || '5'}위 공식 입상`,
       badgeClass: 'bg-emerald-500/20 text-[#34d399] border border-emerald-500/40 font-bold',
       icon: '🎖️',
       isChampion: false,
@@ -91,7 +92,8 @@ function getRankBadgeInfo(rank?: number | string, award?: string) {
   }
 
   return {
-    text: '⚡ OFFICIAL ATHLETE • 본선 무대 출전',
+    title: 'OFFICIAL ATHLETE',
+    subtitle: '본선 무대 출전 완료',
     badgeClass: 'bg-white/10 text-white/80 border border-white/15 font-bold',
     icon: '⚡',
     isChampion: false,
@@ -131,7 +133,7 @@ export default function PlayerShowcasePage() {
         const data = await getInvoiceByIdOrPlayerUid(id);
         if (data) {
           setPlayer(data);
-          setCheerCount((data as any).cheerCount || (data as any).reactions?.heart || 18);
+          setCheerCount((data as any).cheerCount || (data as any).reactions?.heart || 0);
         } else {
           setError('선수의 공식 출전 쇼케이스 정보를 찾을 수 없습니다.');
         }
@@ -210,14 +212,14 @@ export default function PlayerShowcasePage() {
       <div className="min-h-screen bg-[#070907] pt-32 pb-20 px-4 flex items-center justify-center text-white font-sans">
         <div className="max-w-md w-full bg-[#111612] border border-white/10 p-8 rounded-2xl text-center shadow-2xl">
           <Award className="w-12 h-12 text-yellow-500/60 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">쇼케이스를 찾을 수 없습니다</h2>
-          <p className="text-xs text-white/60 mb-6 leading-relaxed">
+          <h2 className="text-xl font-bold text-white mb-2 break-keep">쇼케이스를 찾을 수 없습니다</h2>
+          <p className="text-xs text-white/60 mb-6 leading-relaxed break-keep">
             {error || '해당 선수의 출전 쇼케이스 페이지가 존재하지 않거나 비공개 상태입니다.'}
           </p>
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="w-full py-3 bg-[#d2ff00] hover:bg-white text-black font-bold text-xs rounded-xl transition-all"
+            className="w-full py-3 bg-[#d2ff00] hover:bg-white text-black font-bold text-xs rounded-xl transition-all cursor-pointer"
           >
             YBBF 메인으로 돌아가기
           </button>
@@ -253,17 +255,18 @@ export default function PlayerShowcasePage() {
       <div className="absolute bottom-1/3 left-1/4 w-[350px] h-[350px] bg-[#10b981]/5 blur-[130px] rounded-full pointer-events-none" />
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      {/* INSTAGRAM POST CONTAINER (Max 680px Width for Mobile/Desktop) */}
+      {/* SHOWCASE CONTAINER (Max 680px Width for Mobile / Desktop) */}
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      <div className="max-w-[680px] mx-auto relative space-y-5">
+      <div className="max-w-[680px] mx-auto relative space-y-4 sm:space-y-5">
 
-        {/* 1. 인스타그램 감성 프로필 헤더 카드 */}
-        <div className="bg-[#101411] border border-white/10 rounded-3xl p-4 sm:p-6 shadow-2xl relative overflow-hidden">
+        {/* 1. 🏆 인스타그램 감성 프로필 헤더 카드 (모바일 최적화) */}
+        <div className="bg-[#101411] border border-white/10 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl relative overflow-hidden">
           
-          <div className="flex items-center justify-between gap-3">
+          {/* Top Row: Avatar + Name + Share */}
+          <div className="flex items-start justify-between gap-3">
             {/* Left: Avatar with Story Gradient Ring */}
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="relative p-0.5 rounded-full bg-gradient-to-tr from-[#d2ff00] via-[#10b981] to-emerald-400 shadow-md">
+            <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+              <div className="relative shrink-0 p-0.5 rounded-full bg-gradient-to-tr from-[#d2ff00] via-[#10b981] to-emerald-400 shadow-md">
                 <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-black p-0.5">
                   {avatarUrl ? (
                     <img src={avatarUrl} alt={player.playerName} className="w-full h-full object-cover rounded-full" />
@@ -278,43 +281,31 @@ export default function PlayerShowcasePage() {
                 </span>
               </div>
 
-              {/* Player Name & Association */}
-              <div className="space-y-0.5">
+              {/* Player Name & Verified Badge */}
+              <div className="min-w-0 space-y-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                  <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight break-keep">
                     {player.playerName}
                   </h1>
-                  <CheckCircle2 className="w-4 h-4 text-[#34d399] fill-[#34d399]/20" />
-                  <span className="text-[10px] font-mono font-bold text-black bg-[#d2ff00] px-2 py-0.5 rounded-md">
+                  <CheckCircle2 className="w-4 h-4 text-[#34d399] fill-[#34d399]/20 shrink-0" />
+                  <span className="text-[10px] font-mono font-bold text-black bg-[#d2ff00] px-2 py-0.5 rounded-md whitespace-nowrap">
                     ATHLETE
                   </span>
                 </div>
 
-                <p className="text-xs text-[#34d399] font-bold flex items-center gap-1 truncate max-w-[240px] sm:max-w-[340px]">
-                  <Building className="w-3 h-3 text-[#34d399] shrink-0" />
-                  <span>{player.playerGym || '용인시보디빌딩협회'}</span>
-                </p>
-
-                <p className="text-[11px] text-white/50 flex items-center gap-2 pt-0.5">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-white/40" />
-                    {player.contestDate || '2026-08-29'}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1 text-white/60 font-medium truncate">
-                    <MapPin className="w-3 h-3 text-[#34d399]" />
-                    {player.contestLocation || '용인시청 에이스홀'}
-                  </span>
-                </p>
+                <div className="text-xs text-[#34d399] font-bold flex items-center gap-1.5 break-keep">
+                  <Building className="w-3.5 h-3.5 text-[#34d399] shrink-0" />
+                  <span className="truncate">{player.playerGym || '용인시보디빌딩협회'}</span>
+                </div>
               </div>
             </div>
 
             {/* Right: Quick Action (Share) */}
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="shrink-0 pt-0.5">
               <button
                 type="button"
                 onClick={handleNativeShare}
-                className="p-2.5 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white rounded-2xl border border-white/10 transition-colors cursor-pointer"
+                className="p-2.5 sm:p-3 bg-white/5 hover:bg-white/15 text-white/80 hover:text-white rounded-2xl border border-white/10 transition-colors cursor-pointer flex items-center justify-center"
                 title="쇼케이스 공유하기"
               >
                 <Send className="w-4 h-4 text-[#d2ff00]" />
@@ -322,14 +313,26 @@ export default function PlayerShowcasePage() {
             </div>
           </div>
 
+          {/* Info Badges (Date & Venue) */}
+          <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap items-center gap-2 text-[11px] text-white/60">
+            <span className="inline-flex items-center gap-1 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full whitespace-nowrap">
+              <Calendar className="w-3 h-3 text-white/40" />
+              <span>{player.contestDate || '2026-08-29'}</span>
+            </span>
+            <span className="inline-flex items-center gap-1 bg-white/5 border border-white/10 px-2.5 py-1 rounded-full break-keep">
+              <MapPin className="w-3 h-3 text-[#34d399]" />
+              <span>{player.contestLocation || '용인시청 에이스홀'}</span>
+            </span>
+          </div>
+
           {/* 🎬 무대 LED 송출 인트로 영상 보기 버튼 (인스타 릴스 감성) */}
-          <div className="mt-4 pt-3.5 border-t border-white/10 flex items-center justify-between gap-3">
+          <div className="mt-3 pt-2">
             <button
               type="button"
               onClick={() => setIsIntroModalOpen(true)}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-[#d2ff00] via-[#a3e635] to-[#10b981] text-black shadow-lg shadow-[#d2ff00]/20 hover:brightness-110 transition-all cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm bg-gradient-to-r from-[#d2ff00] via-[#a3e635] to-[#10b981] text-black shadow-lg shadow-[#d2ff00]/20 hover:brightness-110 transition-all cursor-pointer break-keep"
             >
-              <Video className="w-4 h-4 text-black" />
+              <Video className="w-4 h-4 text-black shrink-0" />
               <span>실제 무대 LED 송출 영상 보기 (풀스크린)</span>
             </button>
           </div>
@@ -337,13 +340,13 @@ export default function PlayerShowcasePage() {
         </div>
 
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        {/* 2. 🏆 공식 대회 성적 및 순위 (Official Contest Results & Awards) */}
+        {/* 2. 🏆 공식 대회 성적 및 순위 (모바일 줄바꿈 완벽 최적화) */}
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div className="flex items-center justify-between px-1">
             <h3 className="text-xs font-mono font-bold text-white/50 flex items-center gap-1.5 uppercase tracking-wider">
               <Trophy className="w-3.5 h-3.5 text-[#d2ff00]" />
-              OFFICIAL CONTEST RESULTS • 대회 성적
+              OFFICIAL RESULTS • 대회 성적
             </h3>
             <span className="text-[10px] font-mono text-[#d2ff00]">
               YBBF VERIFIED
@@ -362,28 +365,33 @@ export default function PlayerShowcasePage() {
                 return (
                   <div
                     key={idx}
-                    className={`rounded-2xl p-4 border transition-all shadow-lg flex items-center justify-between gap-3 ${badge.cardBorder}`}
+                    className={`rounded-2xl p-3.5 sm:p-4 border transition-all shadow-lg space-y-2.5 ${badge.cardBorder}`}
                   >
-                    {/* Left: Category & Grade Title */}
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-black text-white">
-                          {join.contestCategoryTitle}
-                        </span>
-                        <span className="text-[11px] font-mono font-bold text-[#d2ff00] bg-[#d2ff00]/10 border border-[#d2ff00]/25 px-2 py-0.5 rounded-md">
-                          {join.contestGradeTitle}
-                        </span>
+                    {/* Category Title & Grade */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm sm:text-base font-black text-white break-keep">
+                            {join.contestCategoryTitle}
+                          </span>
+                          <span className="text-[11px] font-mono font-bold text-[#d2ff00] bg-[#d2ff00]/10 border border-[#d2ff00]/25 px-2 py-0.5 rounded-md whitespace-nowrap">
+                            {join.contestGradeTitle}
+                          </span>
+                        </div>
+                        <p className="text-[10px] sm:text-[11px] text-white/50 font-mono break-keep">
+                          {player.contestTitle || '제9회 용인특례시 협회장배 보디빌딩대회'}
+                        </p>
                       </div>
-                      <p className="text-[11px] text-white/50 font-mono">
-                        {player.contestTitle || '제9회 용인특례시 협회장배 보디빌딩대회'}
-                      </p>
                     </div>
 
-                    {/* Right: Ranking & Award Badge */}
-                    <div className="shrink-0 text-right">
-                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black shadow-sm ${badge.badgeClass}`}>
-                        <span>{badge.icon}</span>
-                        <span>{badge.text}</span>
+                    {/* Prominent Full-Width Award Badge (모바일에서도 줄바꿈 왜곡 없음) */}
+                    <div className={`flex items-center justify-between px-3.5 py-2 rounded-xl text-xs font-black shadow-sm ${badge.badgeClass}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{badge.icon}</span>
+                        <span className="tracking-wide break-keep">{badge.title}</span>
+                      </div>
+                      <span className="text-[11px] opacity-90 whitespace-nowrap font-bold">
+                        {badge.subtitle}
                       </span>
                     </div>
                   </div>
@@ -401,55 +409,63 @@ export default function PlayerShowcasePage() {
         </div>
 
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        {/* 3. 인스타그램 피드 뷰어 (1번 메인 포즈 + 2번 액션 포즈) */}
+        {/* 3. 인스타그램 피드 뷰어 (포즈 비율 자동 맞춤 & 전신 완벽 노출) */}
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <div className="space-y-5">
+        <div className="space-y-4 sm:space-y-5">
 
           {/* 📷 [FEED 1] 1번 메인 포즈 컷 */}
           {slot1 && (
-            <div className="bg-[#101411] border border-white/10 rounded-3xl overflow-hidden shadow-2xl space-y-3">
+            <div className="bg-[#101411] border border-white/10 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl space-y-3">
               {/* Feed Header */}
-              <div className="p-3.5 sm:p-4 flex items-center justify-between border-b border-white/5">
+              <div className="p-3 sm:p-4 flex items-center justify-between border-b border-white/5">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full overflow-hidden bg-black p-0.5 border border-[#d2ff00]/40">
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-black p-0.5 border border-[#d2ff00]/40 shrink-0">
                     <img src={avatarUrl} alt={player.playerName} className="w-full h-full object-cover rounded-full" />
                   </div>
                   <div>
                     <span className="text-xs font-black text-white block">{player.playerName}</span>
-                    <span className="text-[10px] text-white/40 font-mono">🏆 1번 메인 포즈 컷 (16:9 와이드)</span>
+                    <span className="text-[10px] text-white/40 font-mono">🏆 1번 메인 포즈 컷</span>
                   </div>
                 </div>
-                <span className="text-[10px] font-mono font-bold text-[#d2ff00] bg-[#d2ff00]/10 border border-[#d2ff00]/25 px-2.5 py-1 rounded-full">
-                  OFFICIAL MAIN CUT
+                <span className="text-[10px] font-mono font-bold text-[#d2ff00] bg-[#d2ff00]/10 border border-[#d2ff00]/25 px-2.5 py-1 rounded-full whitespace-nowrap">
+                  MAIN CUT
                 </span>
               </div>
 
-              {/* Main Image View (16:9 Wide) */}
+              {/* Adaptive Image Container (전신 사진 잘림 없는 반응형 뷰어) */}
               <div 
                 onClick={() => setActiveLightboxMedia({ type: 'image', url: slot1 })}
-                className="relative aspect-[16/9] w-full bg-black cursor-pointer group overflow-hidden"
+                className="relative w-full bg-[#030503] cursor-pointer group overflow-hidden flex items-center justify-center min-h-[340px] sm:min-h-[420px] max-h-[580px]"
               >
+                {/* Background Ambient Blur */}
+                <div 
+                  className="absolute inset-0 bg-cover bg-center blur-2xl opacity-20 scale-110 pointer-events-none"
+                  style={{ backgroundImage: `url(${slot1})` }}
+                />
+                
                 <img
                   src={slot1}
                   alt={`${player.playerName} 메인 포즈`}
-                  className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+                  className="relative z-10 max-w-full max-h-[580px] w-auto h-auto object-contain group-hover:scale-102 transition-transform duration-300"
                   loading="eager"
                 />
-                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <span className="bg-black/75 backdrop-blur-md text-white text-xs font-bold px-3.5 py-1.5 rounded-full border border-white/20">
-                    🔍 탭하여 전체화면 확대
+                
+                <div className="absolute inset-0 z-20 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <span className="bg-black/80 backdrop-blur-md text-white text-xs font-bold px-3.5 py-1.5 rounded-full border border-white/20 flex items-center gap-1.5 shadow-xl">
+                    <Maximize2 size={13} />
+                    <span>탭하여 원본 고화질 확대</span>
                   </span>
                 </div>
               </div>
 
               {/* Instagram Interaction Action Bar */}
-              <div className="px-4 pb-4 pt-1 space-y-2">
+              <div className="px-3.5 sm:px-4 pb-4 pt-1 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <button
                       type="button"
                       onClick={handleCheer}
-                      className={`transition-transform cursor-pointer ${cheerAnimation ? 'scale-125' : 'hover:scale-110'}`}
+                      className={`p-1.5 -m-1.5 transition-transform cursor-pointer flex items-center justify-center ${cheerAnimation ? 'scale-125' : 'hover:scale-110 active:scale-95'}`}
                       title="좋아요 / 응원하기"
                     >
                       <Heart className={`w-6 h-6 ${hasCheered ? 'text-rose-500 fill-rose-500' : 'text-white/80 hover:text-rose-400'}`} />
@@ -460,7 +476,7 @@ export default function PlayerShowcasePage() {
                         const el = document.getElementById('comment-section');
                         el?.scrollIntoView({ behavior: 'smooth' });
                       }}
-                      className="text-white/80 hover:text-white transition-transform hover:scale-110 cursor-pointer"
+                      className="p-1.5 -m-1.5 text-white/80 hover:text-white transition-transform hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center"
                       title="응원 댓글 남기기"
                     >
                       <MessageCircle className="w-6 h-6" />
@@ -468,7 +484,7 @@ export default function PlayerShowcasePage() {
                     <button
                       type="button"
                       onClick={handleNativeShare}
-                      className="text-white/80 hover:text-[#d2ff00] transition-transform hover:scale-110 cursor-pointer"
+                      className="p-1.5 -m-1.5 text-white/80 hover:text-[#d2ff00] transition-transform hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center"
                       title="공유하기"
                     >
                       <Send className="w-6 h-6" />
@@ -478,7 +494,7 @@ export default function PlayerShowcasePage() {
                   <button
                     type="button"
                     onClick={() => setIsBookmarked(!isBookmarked)}
-                    className="text-white/80 hover:text-white transition-transform hover:scale-110 cursor-pointer"
+                    className="p-1.5 -m-1.5 text-white/80 hover:text-white transition-transform hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center"
                     title="저장하기"
                   >
                     <Bookmark className={`w-5 h-5 ${isBookmarked ? 'text-[#d2ff00] fill-[#d2ff00]' : ''}`} />
@@ -488,7 +504,7 @@ export default function PlayerShowcasePage() {
                 <div className="text-xs text-white/80 font-bold">
                   좋아요 <span className="text-[#d2ff00] font-mono font-black">{cheerCount}개</span>
                 </div>
-                <p className="text-xs text-white/70 leading-relaxed">
+                <p className="text-xs text-white/70 leading-relaxed break-keep">
                   <span className="font-black text-white mr-1.5">{player.playerName}</span>
                   {player.contestTitle || '제9회 용인특례시 협회장배 보디빌딩대회'} 공식 무대 메인 포즈 인증 컷 🏆
                 </p>
@@ -498,49 +514,57 @@ export default function PlayerShowcasePage() {
 
           {/* 📷 [FEED 2] 2번 액션 포즈 컷 (있는 경우) */}
           {slot2 && (
-            <div className="bg-[#101411] border border-white/10 rounded-3xl overflow-hidden shadow-2xl space-y-3">
+            <div className="bg-[#101411] border border-white/10 rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl space-y-3">
               {/* Feed Header */}
-              <div className="p-3.5 sm:p-4 flex items-center justify-between border-b border-white/5">
+              <div className="p-3 sm:p-4 flex items-center justify-between border-b border-white/5">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-full overflow-hidden bg-black p-0.5 border border-emerald-500/40">
+                  <div className="w-8 h-8 rounded-full overflow-hidden bg-black p-0.5 border border-emerald-500/40 shrink-0">
                     <img src={avatarUrl} alt={player.playerName} className="w-full h-full object-cover rounded-full" />
                   </div>
                   <div>
                     <span className="text-xs font-black text-white block">{player.playerName}</span>
-                    <span className="text-[10px] text-white/40 font-mono">🥈 2번 액션 포즈 컷 (16:9 와이드)</span>
+                    <span className="text-[10px] text-white/40 font-mono">🥈 2번 액션 포즈 컷</span>
                   </div>
                 </div>
-                <span className="text-[10px] font-mono font-bold text-[#34d399] bg-[#34d399]/10 border border-[#34d399]/25 px-2.5 py-1 rounded-full">
-                  OFFICIAL ACTION CUT
+                <span className="text-[10px] font-mono font-bold text-[#34d399] bg-[#34d399]/10 border border-[#34d399]/25 px-2.5 py-1 rounded-full whitespace-nowrap">
+                  ACTION CUT
                 </span>
               </div>
 
-              {/* Main Image View (16:9 Wide) */}
+              {/* Adaptive Image Container */}
               <div 
                 onClick={() => setActiveLightboxMedia({ type: 'image', url: slot2 })}
-                className="relative aspect-[16/9] w-full bg-black cursor-pointer group overflow-hidden"
+                className="relative w-full bg-[#030503] cursor-pointer group overflow-hidden flex items-center justify-center min-h-[340px] sm:min-h-[420px] max-h-[580px]"
               >
+                {/* Background Ambient Blur */}
+                <div 
+                  className="absolute inset-0 bg-cover bg-center blur-2xl opacity-20 scale-110 pointer-events-none"
+                  style={{ backgroundImage: `url(${slot2})` }}
+                />
+                
                 <img
                   src={slot2}
                   alt={`${player.playerName} 액션 포즈`}
-                  className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+                  className="relative z-10 max-w-full max-h-[580px] w-auto h-auto object-contain group-hover:scale-102 transition-transform duration-300"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <span className="bg-black/75 backdrop-blur-md text-white text-xs font-bold px-3.5 py-1.5 rounded-full border border-white/20">
-                    🔍 탭하여 전체화면 확대
+                
+                <div className="absolute inset-0 z-20 bg-black/25 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <span className="bg-black/80 backdrop-blur-md text-white text-xs font-bold px-3.5 py-1.5 rounded-full border border-white/20 flex items-center gap-1.5 shadow-xl">
+                    <Maximize2 size={13} />
+                    <span>탭하여 원본 고화질 확대</span>
                   </span>
                 </div>
               </div>
 
               {/* Instagram Interaction Action Bar */}
-              <div className="px-4 pb-4 pt-1 space-y-2">
+              <div className="px-3.5 sm:px-4 pb-4 pt-1 space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <button
                       type="button"
                       onClick={handleCheer}
-                      className={`transition-transform cursor-pointer ${cheerAnimation ? 'scale-125' : 'hover:scale-110'}`}
+                      className={`p-1.5 -m-1.5 transition-transform cursor-pointer flex items-center justify-center ${cheerAnimation ? 'scale-125' : 'hover:scale-110 active:scale-95'}`}
                       title="좋아요 / 응원하기"
                     >
                       <Heart className={`w-6 h-6 ${hasCheered ? 'text-rose-500 fill-rose-500' : 'text-white/80 hover:text-rose-400'}`} />
@@ -551,7 +575,7 @@ export default function PlayerShowcasePage() {
                         const el = document.getElementById('comment-section');
                         el?.scrollIntoView({ behavior: 'smooth' });
                       }}
-                      className="text-white/80 hover:text-white transition-transform hover:scale-110 cursor-pointer"
+                      className="p-1.5 -m-1.5 text-white/80 hover:text-white transition-transform hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center"
                       title="응원 댓글 남기기"
                     >
                       <MessageCircle className="w-6 h-6" />
@@ -559,7 +583,7 @@ export default function PlayerShowcasePage() {
                     <button
                       type="button"
                       onClick={handleNativeShare}
-                      className="text-white/80 hover:text-[#d2ff00] transition-transform hover:scale-110 cursor-pointer"
+                      className="p-1.5 -m-1.5 text-white/80 hover:text-[#d2ff00] transition-transform hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center"
                       title="공유하기"
                     >
                       <Send className="w-6 h-6" />
@@ -569,14 +593,14 @@ export default function PlayerShowcasePage() {
                   <button
                     type="button"
                     onClick={() => setIsBookmarked(!isBookmarked)}
-                    className="text-white/80 hover:text-white transition-transform hover:scale-110 cursor-pointer"
+                    className="p-1.5 -m-1.5 text-white/80 hover:text-white transition-transform hover:scale-110 active:scale-95 cursor-pointer flex items-center justify-center"
                     title="저장하기"
                   >
                     <Bookmark className={`w-5 h-5 ${isBookmarked ? 'text-[#d2ff00] fill-[#d2ff00]' : ''}`} />
                   </button>
                 </div>
 
-                <p className="text-xs text-white/70 leading-relaxed">
+                <p className="text-xs text-white/70 leading-relaxed break-keep">
                   <span className="font-black text-white mr-1.5">{player.playerName}</span>
                   무대 위 역동적인 액션 포징과 컨디셔닝 디테일 컷 💪🔥
                 </p>
@@ -599,30 +623,30 @@ export default function PlayerShowcasePage() {
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
         {/* 5. YBBF 플랫폼 전환 CTA 배너 (대회 출전 신청 및 협회 안내) */}
         {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <div className="bg-gradient-to-r from-[#182319] to-[#0c140d] border-2 border-[#d2ff00]/40 rounded-3xl p-6 sm:p-8 text-center space-y-4 shadow-2xl">
-          <div className="w-12 h-12 bg-[#d2ff00]/10 border border-[#d2ff00]/30 rounded-2xl flex items-center justify-center text-[#d2ff00] mx-auto">
-            <Trophy className="w-6 h-6" />
+        <div className="bg-gradient-to-r from-[#182319] to-[#0c140d] border-2 border-[#d2ff00]/40 rounded-2xl sm:rounded-3xl p-5 sm:p-8 text-center space-y-4 shadow-2xl">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 bg-[#d2ff00]/10 border border-[#d2ff00]/30 rounded-2xl flex items-center justify-center text-[#d2ff00] mx-auto">
+            <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div>
-            <h3 className="text-xl sm:text-2xl font-black text-white">
+            <h3 className="text-lg sm:text-2xl font-black text-white break-keep">
               당신도 다음 무대의 주인공이 될 수 있습니다!
             </h3>
-            <p className="text-xs sm:text-sm text-white/60 mt-1.5 max-w-md mx-auto leading-relaxed">
+            <p className="text-xs sm:text-sm text-white/60 mt-1.5 max-w-md mx-auto leading-relaxed break-keep">
               용인시보디빌딩협회(YBBF) 공식 대회는 모든 출전 선수에게 고화질 공식 무대 인증 및 실시간 쇼케이스를 제공합니다.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-3 pt-2">
             <Link
               to="/competition"
-              className="w-full sm:w-auto px-6 py-3.5 bg-[#d2ff00] hover:bg-white text-black font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-[#d2ff00]/25 flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full sm:w-auto px-6 py-3.5 bg-[#d2ff00] hover:bg-white text-black font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-[#d2ff00]/25 flex items-center justify-center gap-2 cursor-pointer break-keep"
             >
               <span>2026 YBBF 대회 출전 신청하기</span>
               <ChevronRight className="w-4 h-4" />
             </Link>
             <Link
               to="/"
-              className="w-full sm:w-auto px-5 py-3.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs transition-colors border border-white/15 flex items-center justify-center gap-1.5"
+              className="w-full sm:w-auto px-5 py-3.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs transition-colors border border-white/15 flex items-center justify-center gap-1.5 break-keep"
             >
               <ExternalLink className="w-3.5 h-3.5" />
               <span>협회 공식 홈페이지 둘러보기</span>

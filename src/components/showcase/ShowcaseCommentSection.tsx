@@ -57,7 +57,7 @@ function formatTimeAgo(isoString: string): string {
 }
 
 export function ShowcaseCommentSection({ invoiceId, playerName }: ShowcaseCommentSectionProps) {
-  const [reactions, setReactions] = useState<ShowcaseReactions>({ heart: 18, fire: 12, clap: 24, trophy: 7 });
+  const [reactions, setReactions] = useState<ShowcaseReactions>({ heart: 0, fire: 0, clap: 0, trophy: 0 });
   const [activeReactionAnim, setActiveReactionAnim] = useState<ShowcaseReactionType | null>(null);
 
   const [comments, setComments] = useState<ShowcaseComment[]>([]);
@@ -71,7 +71,7 @@ export function ShowcaseCommentSection({ invoiceId, playerName }: ShowcaseCommen
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [commentSuccessAnim, setCommentSuccessAnim] = useState<boolean>(false);
 
-  // Load Reactions and Comments on Mount
+  // Load Reactions and Comments on Mount (순수 실제 데이터만 로드)
   useEffect(() => {
     if (!invoiceId) return;
 
@@ -80,34 +80,7 @@ export function ShowcaseCommentSection({ invoiceId, playerName }: ShowcaseCommen
     setLoadingComments(true);
     getShowcaseComments(invoiceId)
       .then((data) => {
-        if (data.length === 0) {
-          // 초기 디폴트 응원글 샘플 제공
-          const initialSamples: ShowcaseComment[] = [
-            {
-              id: 'init_1',
-              invoiceId,
-              authorName: '강철짐 관장님',
-              authorGym: '강철 피트니스',
-              content: `${playerName} 선수님! 무대 위에서 흘린 땀방울이 그대로 드러났습니다. 진심으로 고생 많으셨습니다! 🏆`,
-              badge: '🥇 1위가자!',
-              createdAt: new Date(Date.now() - 1000 * 60 * 35).toISOString(),
-              likeCount: 4,
-            },
-            {
-              id: 'init_2',
-              invoiceId,
-              authorName: '박근육 코치',
-              authorGym: '용인시체육관',
-              content: '하체 세퍼레이션이랑 어깨 볼륨감 대박이네요! 다음 무대도 응원하겠습니다! 🔥🔥',
-              badge: '🔥 불꽃응원',
-              createdAt: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
-              likeCount: 6,
-            }
-          ];
-          setComments(initialSamples);
-        } else {
-          setComments(data);
-        }
+        setComments(data || []);
       })
       .finally(() => setLoadingComments(false));
   }, [invoiceId, playerName]);
@@ -331,13 +304,13 @@ export function ShowcaseCommentSection({ invoiceId, playerName }: ShowcaseCommen
 
           {/* Quick Phrases */}
           <div className="flex flex-wrap gap-1.5 items-center">
-            <span className="text-[10px] text-white/40 font-mono">빠른 입력:</span>
+            <span className="text-[10px] text-white/40 font-mono shrink-0">빠른 입력:</span>
             {QUICK_PHRASES.map((phrase, i) => (
               <button
                 key={i}
                 type="button"
                 onClick={() => setCommentText(phrase)}
-                className="px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] text-white/70 hover:text-[#d2ff00] transition-colors cursor-pointer"
+                className="px-2.5 py-1 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] text-white/70 hover:text-[#d2ff00] transition-colors cursor-pointer break-keep"
               >
                 {phrase}
               </button>
@@ -345,23 +318,23 @@ export function ShowcaseCommentSection({ invoiceId, playerName }: ShowcaseCommen
           </div>
 
           {/* Textarea & Submit */}
-          <div className="relative">
+          <div className="relative space-y-2">
             <textarea
               rows={3}
               placeholder={`${playerName} 선수에게 전할 응원 메시지를 작성해 주세요...`}
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               maxLength={300}
-              className="w-full bg-[#161d17] border border-white/15 focus:border-[#d2ff00] focus:ring-1 focus:ring-[#d2ff00] rounded-2xl p-4 text-xs text-white placeholder:text-white/30 outline-none transition-colors resize-none"
+              className="w-full bg-[#161d17] border border-white/15 focus:border-[#d2ff00] focus:ring-1 focus:ring-[#d2ff00] rounded-xl sm:rounded-2xl p-3.5 sm:p-4 text-xs text-white placeholder:text-white/30 outline-none transition-colors resize-none break-keep"
             />
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center justify-between">
               <span className="text-[10px] text-white/40 font-mono">
                 {commentText.length}/300자
               </span>
               <button
                 type="submit"
                 disabled={!commentText.trim() || isSubmitting}
-                className="px-5 py-2.5 bg-[#d2ff00] hover:bg-white text-black font-black rounded-xl text-xs transition-all shadow-md shadow-[#d2ff00]/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-4 sm:px-5 py-2 sm:py-2.5 bg-[#d2ff00] hover:bg-white text-black font-black rounded-xl text-xs transition-all shadow-md shadow-[#d2ff00]/20 flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed break-keep"
               >
                 <Send className="w-3.5 h-3.5" />
                 <span>{isSubmitting ? '등록 중...' : '응원글 남기기'}</span>
@@ -370,7 +343,7 @@ export function ShowcaseCommentSection({ invoiceId, playerName }: ShowcaseCommen
           </div>
 
           {commentSuccessAnim && (
-            <div className="p-3 bg-[#10b981]/20 border border-[#10b981] rounded-xl text-xs text-[#34d399] font-bold text-center animate-in fade-in duration-200">
+            <div className="p-3 bg-[#10b981]/20 border border-[#10b981] rounded-xl text-xs text-[#34d399] font-bold text-center animate-in fade-in duration-200 break-keep">
               {playerName} 선수에게 응원글이 성공적으로 등록되었습니다!
             </div>
           )}
@@ -381,7 +354,7 @@ export function ShowcaseCommentSection({ invoiceId, playerName }: ShowcaseCommen
       {/* 3. 실시간 응원 댓글 피드 목록 (Social Feed List) */}
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <div className="space-y-3">
-        <h4 className="text-sm font-black text-white flex items-center gap-2 px-1">
+        <h4 className="text-sm font-black text-white flex items-center gap-2 px-1 break-keep">
           <MessageCircle className="w-4 h-4 text-[#d2ff00]" />
           선수 응원 피드 ({comments.length})
         </h4>
@@ -391,39 +364,39 @@ export function ShowcaseCommentSection({ invoiceId, playerName }: ShowcaseCommen
             응원 피드를 불러오는 중...
           </div>
         ) : comments.length === 0 ? (
-          <div className="p-10 text-center space-y-2 bg-[#0c100d] rounded-2xl border border-white/5">
+          <div className="p-8 sm:p-10 text-center space-y-2 bg-[#0c100d] rounded-2xl border border-white/5">
             <span className="text-3xl block">💌</span>
-            <p className="text-xs font-bold text-white/80">아직 등록된 응원글이 없습니다.</p>
-            <p className="text-[11px] text-white/40">선수에게 첫 번째 축하와 격려의 메시지를 남겨보세요!</p>
+            <p className="text-xs font-bold text-white/80 break-keep">아직 등록된 응원글이 없습니다.</p>
+            <p className="text-[11px] text-white/40 break-keep">선수에게 첫 번째 축하와 격려의 메시지를 남겨보세요!</p>
           </div>
         ) : (
           <div className="space-y-3">
             {comments.map((cmt) => (
               <div 
                 key={cmt.id}
-                className="bg-[#0e130f] border border-white/10 hover:border-white/20 rounded-2xl p-4 sm:p-5 transition-all shadow-lg space-y-2.5"
+                className="bg-[#0e130f] border border-white/10 hover:border-white/20 rounded-2xl p-3.5 sm:p-5 transition-all shadow-lg space-y-2.5"
               >
                 {/* Comment Author Header */}
                 <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
                     {/* Avatar Icon */}
-                    <div className="w-8 h-8 rounded-full bg-[#d2ff00]/15 border border-[#d2ff00]/30 flex items-center justify-center text-[#d2ff00] font-black text-xs">
+                    <div className="w-8 h-8 rounded-full bg-[#d2ff00]/15 border border-[#d2ff00]/30 flex items-center justify-center text-[#d2ff00] font-black text-xs shrink-0">
                       {cmt.authorName.slice(0, 1) || '팬'}
                     </div>
 
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-black text-white">{cmt.authorName}</span>
+                        <span className="text-xs font-black text-white truncate max-w-[120px] sm:max-w-[200px]">{cmt.authorName}</span>
                         {cmt.badge && (
-                          <span className="text-[10px] font-bold text-[#d2ff00] bg-[#d2ff00]/10 border border-[#d2ff00]/25 px-2 py-0.5 rounded-full">
+                          <span className="text-[10px] font-bold text-[#d2ff00] bg-[#d2ff00]/10 border border-[#d2ff00]/25 px-2 py-0.5 rounded-full whitespace-nowrap">
                             {cmt.badge}
                           </span>
                         )}
                       </div>
                       {cmt.authorGym && (
-                        <span className="text-[10px] text-white/40 flex items-center gap-1 mt-0.5">
-                          <Building className="w-2.5 h-2.5 text-[#34d399]" />
-                          {cmt.authorGym}
+                        <span className="text-[10px] text-white/40 flex items-center gap-1 mt-0.5 truncate max-w-[160px] sm:max-w-[240px]">
+                          <Building className="w-2.5 h-2.5 text-[#34d399] shrink-0" />
+                          <span className="truncate">{cmt.authorGym}</span>
                         </span>
                       )}
                     </div>
@@ -437,7 +410,7 @@ export function ShowcaseCommentSection({ invoiceId, playerName }: ShowcaseCommen
                 </div>
 
                 {/* Comment Content */}
-                <p className="text-xs sm:text-sm text-white/85 leading-relaxed pl-10 pr-2 whitespace-pre-wrap">
+                <p className="text-xs sm:text-sm text-white/85 leading-relaxed pl-10 pr-2 whitespace-pre-wrap break-keep">
                   {cmt.content}
                 </p>
               </div>

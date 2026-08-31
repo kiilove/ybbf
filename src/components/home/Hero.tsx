@@ -3,9 +3,69 @@ import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import WebGLHero from './WebGLHero';
 import { useSettingsStore } from '../../store/useSettingsStore';
-import { ChevronLeft, ChevronRight, Trophy, Sparkles } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Trophy, Sparkles, Crown } from 'lucide-react';
 
 gsap.registerPlugin(ScrollTrigger);
+
+// 다관왕(2관왕 이상) 스마트 통합 및 중복 챔피언 병합 함수
+function formatSmartHeroPlayers(rawList: any[]): any[] {
+  const map = new Map<string, any>();
+
+  rawList.forEach((p) => {
+    if (!p.heroImageUrl || p.heroImageUrl.includes('default-player-1')) return;
+    if (p.heroName && (p.heroName.includes('김민균') || p.heroName.includes('KIM MIN-KYUN'))) return;
+
+    const key = (p.heroName || '').trim();
+    if (!key) return;
+
+    const rawClass = (p.heroClass || '').replace(/\(오버롤\)/g, '').replace(/그랑프리/g, '').trim();
+
+    if (map.has(key)) {
+      const existing = map.get(key);
+      existing.crownCount = (existing.crownCount || 1) + 1;
+      existing.isMultiCrown = true;
+      existing.crownBadge = `👑 ${existing.crownCount}관왕`;
+      if (!existing.classes) {
+        existing.classes = [existing.heroClass.replace(/\(오버롤\)/g, '').replace(/그랑프리/g, '').replace(/\(2관왕\)/g, '').trim()];
+      }
+      if (rawClass && !existing.classes.includes(rawClass)) {
+        existing.classes.push(rawClass);
+      }
+      existing.heroClass = `${existing.classes.join(' · ')} (${existing.crownCount}관왕)`;
+      existing.heroTitles = `2026 제9회 용인특례시 보디빌딩대회 ${existing.classes.join(' & ')} ${existing.crownCount}관왕 오버롤 그랑프리`;
+      
+      if (!existing.stagePhoto2 && (p.stagePhoto1 || p.stagePhoto2 || p.heroImageUrl)) {
+        existing.stagePhoto2 = p.stagePhoto2 || p.stagePhoto1 || p.heroImageUrl;
+      }
+    } else {
+      const isAlreadyMulti = (p.heroClass && (p.heroClass.includes('2관왕') || p.heroClass.includes('&') || p.heroClass.includes('·'))) ||
+                             (p.heroTitles && p.heroTitles.includes('2관왕')) ||
+                             (key === '김민경');
+
+      const crownCount = isAlreadyMulti ? 2 : 1;
+      const isMultiCrown = isAlreadyMulti;
+      const crownBadge = isMultiCrown ? '👑 2관왕' : 'GRAND PRIX';
+
+      let formattedClass = p.heroClass;
+      if (key === '김민경') {
+        formattedClass = '비키니 · 스포츠 모델 (2관왕)';
+      } else if (isAlreadyMulti && !formattedClass.includes('2관왕')) {
+        formattedClass = `${formattedClass} (2관왕)`;
+      }
+
+      map.set(key, {
+        ...p,
+        heroClass: formattedClass,
+        crownCount,
+        isMultiCrown,
+        crownBadge,
+        classes: [rawClass]
+      });
+    }
+  });
+
+  return Array.from(map.values());
+}
 
 // 가중치 계산 함수 (일반부, 클래식 보디빌딩, 비키니에 기본 1 + 5 = 6 가중치 부여)
 function getHeroWeight(hero: any): number {
@@ -90,13 +150,8 @@ export default function Hero() {
         }
       ];
 
-  // 사진이 있는 유효한 챔피언만 선별
-  const heroPlayers = rawHeroPlayers.filter((p: any) => 
-    p.heroImageUrl && 
-    !p.heroImageUrl.includes('default-player-1') &&
-    !p.heroName.includes('김민균') &&
-    !p.heroName.includes('KIM MIN-KYUN')
-  );
+  // 스마트 다관왕 통합 및 사진 있는 유효 챔피언 선별
+  const heroPlayers = formatSmartHeroPlayers(rawHeroPlayers);
 
   // D1 로드 시 일반부/클래식/비키니에 5배 가중치를 부여한 가중치 랜덤으로 초기 선택
   useEffect(() => {
@@ -245,13 +300,22 @@ export default function Hero() {
                 />
               )}
 
-              {/* LEFT: 뱃지 */}
-              <div className="flex items-center gap-1.5 text-yellow-400 shrink-0">
-                <Trophy size={15} className="animate-pulse text-yellow-400" />
-                <span className="text-[11px] font-mono font-bold tracking-wider uppercase text-yellow-400 hidden sm:inline">
-                  GRAND PRIX
-                </span>
-              </div>
+              {/* LEFT: 뱃지 (2관왕 이상은 전용 골드 크라운 뱃지 노출) */}
+              {currentHero.isMultiCrown ? (
+                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-yellow-500/25 via-amber-500/35 to-yellow-500/25 border border-yellow-400/80 text-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.5)] shrink-0">
+                  <Crown size={14} className="text-yellow-400 animate-pulse" />
+                  <span className="text-[11px] font-mono font-black tracking-wider uppercase">
+                    {currentHero.crownBadge || '👑 2관왕'}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 text-yellow-400 shrink-0">
+                  <Trophy size={15} className="animate-pulse text-yellow-400" />
+                  <span className="text-[11px] font-mono font-bold tracking-wider uppercase text-yellow-400 hidden sm:inline">
+                    GRAND PRIX
+                  </span>
+                </div>
+              )}
 
               <div className="h-3.5 w-px bg-white/20 shrink-0" />
 
@@ -356,7 +420,8 @@ export default function Hero() {
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse shadow-[0_0_12px_rgba(220,38,38,0.9)]" />
                 <p className="text-[#b4ff00] font-mono font-bold tracking-[0.35em] text-[10px] md:text-xs uppercase flex items-center gap-1.5 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
-                  <Sparkles size={12} className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" /> OVERALL GRAND PRIX CHAMPION
+                  <Sparkles size={12} className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" /> 
+                  {currentHero.isMultiCrown ? `👑 ${currentHero.crownCount || 2}관왕 DOUBLE GRAND PRIX CHAMPION` : 'OVERALL GRAND PRIX CHAMPION'}
                 </p>
               </div>
               <h2 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-display font-black italic uppercase tracking-tight text-white leading-[0.88] drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">

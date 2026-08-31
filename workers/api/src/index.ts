@@ -3177,10 +3177,10 @@ app.post('/api/admin/contests/:contestId/results', async (c) => {
       }
     }
 
-    // 4) 그랑프리 챔피언들을 system_settings의 heroPlayers에 자동 동기화
+    // 4) 그랑프리 챔피언들을 system_settings의 heroPlayers에 자동 동기화 (다관왕 스마트 통합)
     const grandPrixCategories = categories.filter((cat: any) => cat.isOverall);
     if (grandPrixCategories.length > 0) {
-      const heroPlayers: any[] = [];
+      const playerMap = new Map<string, any>();
 
       for (const gpCat of grandPrixCategories) {
         const playerList = Array.isArray(gpCat.results) ? gpCat.results : (typeof gpCat.results === 'string' ? JSON.parse(gpCat.results) : []);
@@ -3190,6 +3190,8 @@ app.post('/api/admin/contests/:contestId/results', async (c) => {
         const pNum = winner.playerNumber ? String(winner.playerNumber).trim() : '';
         const pUid = winner.playerUid ? String(winner.playerUid).trim() : '';
         const pName = winner.playerName ? String(winner.playerName).trim() : '';
+        const pKey = pName || pUid || pNum;
+        if (!pKey) continue;
 
         // D1 invoices_pool에서 해당 선수의 고화질 무대 사진 조회
         let photoUrl = winner.playerPhotoUrl || '';
@@ -3209,28 +3211,51 @@ app.post('/api/admin/contests/:contestId/results', async (c) => {
           }
         }
 
-        const heroId = `hero-gp-${(pUid || pNum || pName).toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
-        const realHeight = winner.playerHeight || invRow?.playerHeight || '';
-        const realWeight = winner.playerWeight || invRow?.playerWeight || '';
         const stage1 = winner.stagePhoto1 || invRow?.stagePhoto1 || photoUrl;
         const stage2 = winner.stagePhoto2 || invRow?.stagePhoto2 || '';
+        const catTitle = gpCat.categoryTitle.replace(/그랑프리/g, '').trim();
 
-        heroPlayers.push({
-          id: heroId,
-          heroName: pName,
-          heroClass: `${gpCat.categoryTitle} (오버롤)`,
-          heroHeight: realHeight ? String(realHeight) : '',
-          heroWeight: realWeight ? String(realWeight) : '',
-          heroGym: winner.playerGym || invRow?.playerGym || '용인시보디빌딩협회',
-          heroTitles: `2026 제9회 용인특례시 보디빌딩대회 ${gpCat.categoryTitle} 챔피언`,
-          heroImageUrl: stage1 || photoUrl || 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/player_photos/default-player-1_hero_section.png',
-          stagePhoto1: stage1,
-          stagePhoto2: stage2,
-          heroInstagram: '#',
-          heroYoutube: '#',
-          heroFacebook: '#'
-        });
+        if (playerMap.has(pKey)) {
+          const existing = playerMap.get(pKey);
+          existing.crownCount = (existing.crownCount || 1) + 1;
+          existing.isMultiCrown = true;
+          existing.crownBadge = `👑 ${existing.crownCount}관왕`;
+          if (!existing.categories.includes(catTitle)) {
+            existing.categories.push(catTitle);
+          }
+          existing.heroClass = `${existing.categories.join(' · ')} (${existing.crownCount}관왕)`;
+          existing.heroTitles = `2026 제9회 용인특례시 보디빌딩대회 ${existing.categories.join(' & ')} ${existing.crownCount}관왕 오버롤 그랑프리`;
+          if (!existing.stagePhoto2 && (stage1 || stage2)) {
+            existing.stagePhoto2 = stage2 || stage1;
+          }
+        } else {
+          const heroId = `hero-gp-${(pUid || pNum || pName).toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
+          const realHeight = winner.playerHeight || invRow?.playerHeight || '';
+          const realWeight = winner.playerWeight || invRow?.playerWeight || '';
+
+          playerMap.set(pKey, {
+            id: heroId,
+            heroName: pName,
+            heroClass: `${gpCat.categoryTitle} (오버롤)`,
+            categories: [catTitle],
+            crownCount: 1,
+            isMultiCrown: false,
+            crownBadge: 'GRAND PRIX',
+            heroHeight: realHeight ? String(realHeight) : '',
+            heroWeight: realWeight ? String(realWeight) : '',
+            heroGym: winner.playerGym || invRow?.playerGym || '용인시보디빌딩협회',
+            heroTitles: `2026 제9회 용인특례시 보디빌딩대회 ${gpCat.categoryTitle} 챔피언`,
+            heroImageUrl: stage1 || photoUrl || 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/player_photos/default-player-1_hero_section.png',
+            stagePhoto1: stage1,
+            stagePhoto2: stage2,
+            heroInstagram: '#',
+            heroYoutube: '#',
+            heroFacebook: '#'
+          });
+        }
       }
+
+      const heroPlayers = Array.from(playerMap.values());
 
       if (heroPlayers.length > 0) {
         const settingsRow = await c.env.DB.prepare("SELECT value FROM system_settings WHERE key = 'system_settings'").first() as { value: string } | null;
@@ -3403,6 +3428,19 @@ app.get('/api/contests/:contestId/auto-roster', async (c) => {
               edition: editionNumber,
               titles: []
             });
+          } else {
+            const legendObj = legendsMap.get(name);
+            legendObj.crownCount = (legendObj.crownCount || 1) + 1;
+            legendObj.isMultiCrown = true;
+            legendObj.crownBadge = `👑 ${legendObj.crownCount}관왕`;
+            if (!legendObj.classes) {
+              legendObj.classes = [legendObj.class.replace(/그랑프리/g, '').trim()];
+            }
+            const newClass = cat.categoryTitle.replace(/그랑프리/g, '').trim();
+            if (!legendObj.classes.includes(newClass)) {
+              legendObj.classes.push(newClass);
+            }
+            legendObj.class = `${legendObj.classes.join(' · ')} (${legendObj.crownCount}관왕)`;
           }
           legendsMap.get(name).titles.push({
             year: 2026,

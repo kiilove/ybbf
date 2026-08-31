@@ -620,40 +620,6 @@ export default function PlayerShowcasePage() {
           />
         </div>
 
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        {/* 5. YBBF 플랫폼 전환 CTA 배너 (대회 출전 신청 및 협회 안내) */}
-        {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-        <div className="bg-gradient-to-r from-[#182319] to-[#0c140d] border-2 border-[#d2ff00]/40 rounded-2xl sm:rounded-3xl p-5 sm:p-8 text-center space-y-4 shadow-2xl">
-          <div className="w-11 h-11 sm:w-12 sm:h-12 bg-[#d2ff00]/10 border border-[#d2ff00]/30 rounded-2xl flex items-center justify-center text-[#d2ff00] mx-auto">
-            <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
-          </div>
-          <div>
-            <h3 className="text-lg sm:text-2xl font-black text-white break-keep">
-              당신도 다음 무대의 주인공이 될 수 있습니다!
-            </h3>
-            <p className="text-xs sm:text-sm text-white/60 mt-1.5 max-w-md mx-auto leading-relaxed break-keep">
-              용인시보디빌딩협회(YBBF) 공식 대회는 모든 출전 선수에게 고화질 공식 무대 인증 및 실시간 쇼케이스를 제공합니다.
-            </p>
-          </div>
-
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-3 pt-2">
-            <Link
-              to="/competition"
-              className="w-full sm:w-auto px-6 py-3.5 bg-[#d2ff00] hover:bg-white text-black font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-[#d2ff00]/25 flex items-center justify-center gap-2 cursor-pointer break-keep"
-            >
-              <span>2026 YBBF 대회 출전 신청하기</span>
-              <ChevronRight className="w-4 h-4" />
-            </Link>
-            <Link
-              to="/"
-              className="w-full sm:w-auto px-5 py-3.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs transition-colors border border-white/15 flex items-center justify-center gap-1.5 break-keep"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              <span>협회 공식 홈페이지 둘러보기</span>
-            </Link>
-          </div>
-        </div>
-
       </div>
 
       {/* Lightbox Modal */}

@@ -228,10 +228,10 @@ export default function PlayerShowcasePage() {
     );
   }
 
-  // 1번 메인 포즈 및 2번 액션 포즈 사진 해석
-  const slot1 = player.stagePhoto1 || player.publicStagePhoto1 || player.playerPhotoUrl || '';
-  const slot2 = player.stagePhoto2 || player.publicStagePhoto2 || '';
-  const avatarUrl = slot1 || player.playerPhotoUrl || '';
+  // 1번 메인 포즈 및 2번 액션 포즈 사진 해석 (브랜딩된 공식 공개용 사진 최우선)
+  const slot1 = player.publicStagePhoto1 || player.stagePhoto1 || player.playerPhotoUrl || '';
+  const slot2 = player.publicStagePhoto2 || player.stagePhoto2 || '';
+  const avatarUrl = slot1 || player.publicStagePhoto1 || player.stagePhoto1 || player.playerPhotoUrl || '';
 
   // 출전 종목 목록
   const joins: JoinItem[] = player.joins && Array.isArray(player.joins) ? player.joins : [];

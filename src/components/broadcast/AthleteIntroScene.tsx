@@ -58,10 +58,10 @@ export function AthleteIntroScene({
   const catTitle = currentJoin?.contestCategoryTitle || '공식 종목';
   const grdTitle = currentJoin?.contestGradeTitle || 'OPEN';
 
-  // 1번 사진: 전면 히어로 컷 (stagePhoto1 또는 publicStagePhoto1)
-  const heroPhoto = stagePhoto1 || publicStagePhoto1 || player?.playerPhotoUrl || '';
-  // 2번 사진: 16:9 와이드 배경 컷 (stagePhoto2 또는 publicStagePhoto2)
-  const rawBgPhoto = stagePhoto2 || publicStagePhoto2 || '';
+  // 1번 사진: 전면 히어로 컷 (브랜딩된 publicStagePhoto1 최우선)
+  const heroPhoto = publicStagePhoto1 || stagePhoto1 || player?.playerPhotoUrl || '';
+  // 2번 사진: 16:9 와이드 배경 컷 (브랜딩된 publicStagePhoto2 최우선)
+  const rawBgPhoto = publicStagePhoto2 || stagePhoto2 || '';
   const bgPhoto = rawBgPhoto && rawBgPhoto !== heroPhoto ? rawBgPhoto : '';
 
   // 선수 배부 번호 (ENTRY NO) 다중 안전 추출 로직 (선택된 종목 번호 우선)

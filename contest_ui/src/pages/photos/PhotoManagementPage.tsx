@@ -249,8 +249,9 @@ export default function PhotoManagementPage() {
   useEffect(() => {
     if (staff?.contestId) {
       setFilter('contestId', staff.contestId);
+    } else if (filters.contestId) {
+      fetchList();
     }
-    fetchList();
   }, [staff, filters.contestId, setFilter, fetchList]);
 
   // Group Registrations by Category -> Grade -> Player

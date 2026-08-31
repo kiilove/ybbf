@@ -37,7 +37,15 @@ export default function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [isAuthenticated, isProfileComplete, location.pathname, navigate, isLoading]);
 
+  console.log('[YBBF Debug] AuthProvider render ->', {
+    isAuthenticated,
+    isLoading,
+    isProfileComplete,
+    pathname: location.pathname
+  });
+
   if (isLoading && !isAuthenticated) {
+    console.log('[YBBF Debug] AuthProvider rendering <Loader />');
     return <Loader isLoading={isLoading} />;
   }
 

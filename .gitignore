@@ -21,3 +21,5 @@ workers/state/
 .dev.vars
 **/.dev.vars
 *.vars
+scratch/
+**/scratch/

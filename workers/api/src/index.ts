@@ -149,6 +149,21 @@ async function ensureTables(db: D1Database) {
         used INTEGER NOT NULL DEFAULT 0,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
       )
+    `),
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS contest_results (
+        id TEXT PRIMARY KEY,
+        contestId TEXT NOT NULL,
+        categoryId TEXT,
+        categoryTitle TEXT NOT NULL,
+        gradeId TEXT,
+        gradeTitle TEXT NOT NULL,
+        isOverall INTEGER NOT NULL DEFAULT 0,
+        scoreType TEXT DEFAULT 'ranking',
+        resultsJson TEXT NOT NULL,
+        createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+      )
     `)
   ]);
 
@@ -166,6 +181,18 @@ async function ensureTables(db: D1Database) {
   } catch (e) {}
   try {
     await db.prepare('ALTER TABLE invoices_pool ADD COLUMN playerPhotoUrls TEXT').run();
+  } catch (e) {}
+  try {
+    await db.prepare('ALTER TABLE invoices_pool ADD COLUMN award TEXT').run();
+  } catch (e) {}
+  try {
+    await db.prepare('ALTER TABLE invoices_pool ADD COLUMN rank INTEGER').run();
+  } catch (e) {}
+  try {
+    await db.prepare('ALTER TABLE invoices_pool ADD COLUMN isGrandPrix INTEGER DEFAULT 0').run();
+  } catch (e) {}
+  try {
+    await db.prepare('ALTER TABLE invoices_pool ADD COLUMN playerNumber TEXT').run();
   } catch (e) {}
 
   dbInitialized = true;
@@ -1165,6 +1192,15 @@ async function ensureInvoicesPoolColumns(db: D1Database) {
   } catch (e) {}
   try {
     await db.prepare("ALTER TABLE invoices_pool ADD COLUMN stagePhoto2 TEXT").run();
+  } catch (e) {}
+  try {
+    await db.prepare("ALTER TABLE invoices_pool ADD COLUMN publicStagePhoto1 TEXT").run();
+  } catch (e) {}
+  try {
+    await db.prepare("ALTER TABLE invoices_pool ADD COLUMN publicStagePhoto2 TEXT").run();
+  } catch (e) {}
+  try {
+    await db.prepare("ALTER TABLE invoices_pool ADD COLUMN publicPhotoUrls TEXT").run();
   } catch (e) {}
 }
 
@@ -2781,6 +2817,13 @@ app.get('/api/contest/registrations', contestMiddleware, async (c) => {
       const stagePhoto1 = (item.stagePhoto1 as string) || selectedPhotoUrls[0] || '';
       const stagePhoto2 = (item.stagePhoto2 as string) || selectedPhotoUrls[1] || '';
 
+      let publicPhotoUrls: string[] = [];
+      try {
+        if (item.publicPhotoUrls) {
+          publicPhotoUrls = typeof item.publicPhotoUrls === 'string' ? JSON.parse(item.publicPhotoUrls) : item.publicPhotoUrls;
+        }
+      } catch (e) {}
+
       return {
         ...item,
         joins: item.joins ? JSON.parse(item.joins as string) : [],
@@ -2789,6 +2832,9 @@ app.get('/api/contest/registrations', contestMiddleware, async (c) => {
         selectedPhotoUrls: [stagePhoto1, stagePhoto2],
         stagePhoto1,
         stagePhoto2,
+        publicStagePhoto1: (item.publicStagePhoto1 as string) || '',
+        publicStagePhoto2: (item.publicStagePhoto2 as string) || '',
+        publicPhotoUrls,
         isPriceCheck: !!item.isPriceCheck,
         isCanceled: !!item.isCanceled,
         invoiceEdited: !!item.invoiceEdited,
@@ -2981,6 +3027,758 @@ app.post('/api/contest/sync-from-firestore', contestMiddleware, async (c) => {
   } catch (err: any) {
     console.error('Firestore ➔ D1 동기화 에러:', err);
     return c.json({ error: '동기화 실패: ' + err.message }, 500);
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🏆 Cloudflare D1 대회 공식 심사 결과(순위표 & 그랑프리) 저장 & 조회 API
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// 1. D1 공식 성적 일괄 저장 및 선수 인보이스 동기화
+app.post('/api/admin/contests/:contestId/results', async (c) => {
+  try {
+    const contestId = c.req.param('contestId');
+    const body = await c.req.json();
+    const categories = body.categories as any[];
+
+    if (!Array.isArray(categories)) {
+      return c.json({ error: '유효하지 않은 categories 배열 데이터입니다.' }, 400);
+    }
+
+    const statements: D1PreparedStatement[] = [];
+
+    // 1) 기존 해당 대회의 D1 contest_results 삭제
+    statements.push(
+      c.env.DB.prepare('DELETE FROM contest_results WHERE contestId = ?').bind(contestId)
+    );
+
+    // 2) 신규 카테고리별 결과 D1 삽입
+    const now = new Date().toISOString();
+    const awardMap = new Map<string, { rank: number; award: string; isGrandPrix: boolean; totalScore?: number }>();
+    const playerOverallMap = new Map<string, { award: string; rank: number; isGrandPrix: boolean; playerNumber?: string }>();
+
+    for (const cat of categories) {
+      const docId = cat.docId || `${contestId}_${cat.categoryTitle}_${cat.gradeTitle}`.replace(/[\s/]/g, '_');
+      const isOverall = cat.isOverall ? 1 : 0;
+      const resultsJson = typeof cat.results === 'string' ? cat.results : JSON.stringify(cat.results || []);
+
+      statements.push(
+        c.env.DB.prepare(`
+          INSERT INTO contest_results (
+            id, contestId, categoryId, categoryTitle, gradeId, gradeTitle, isOverall, scoreType, resultsJson, createdAt, updatedAt
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          docId,
+          contestId,
+          cat.categoryId || null,
+          cat.categoryTitle,
+          cat.gradeId || null,
+          cat.gradeTitle,
+          isOverall,
+          cat.scoreType || 'ranking',
+          resultsJson,
+          now,
+          now
+        )
+      );
+
+      // 인보이스 매핑용 데이터 파싱
+      const playerList = Array.isArray(cat.results) ? cat.results : (typeof cat.results === 'string' ? JSON.parse(cat.results) : []);
+      playerList.forEach((r: any) => {
+        const pNum = r.playerNumber ? String(r.playerNumber).trim() : '';
+        const pUid = r.playerUid ? String(r.playerUid).trim() : '';
+        const pName = r.playerName ? String(r.playerName).trim() : '';
+
+        const rankNum = Number(r.playerRank) || 1;
+        const isGp = isOverall === 1 && rankNum === 1;
+        const awardText = isGp ? '그랑프리 우승 (Grand Prix)' : `${rankNum}위`;
+
+        const info = {
+          rank: rankNum,
+          award: awardText,
+          isGrandPrix: isGp,
+          totalScore: r.totalScore
+        };
+
+        if (pNum && cat.categoryTitle) awardMap.set(`${pNum}___${cat.categoryTitle}`, info);
+        if (pUid && cat.categoryTitle) awardMap.set(`${pUid}___${cat.categoryTitle}`, info);
+        if (pName && cat.categoryTitle) awardMap.set(`${pName}___${cat.categoryTitle}`, info);
+
+        if (pNum && cat.gradeTitle) awardMap.set(`${pNum}___${cat.gradeTitle}`, info);
+        if (pUid && cat.gradeTitle) awardMap.set(`${pUid}___${cat.gradeTitle}`, info);
+
+        const key = pUid || pNum || pName;
+        const prev = playerOverallMap.get(key);
+        if (isGp) {
+          playerOverallMap.set(key, { award: '그랑프리 우승 (OVERALL CHAMPION)', rank: 1, isGrandPrix: true, playerNumber: pNum });
+        } else if (!prev || rankNum < prev.rank) {
+          playerOverallMap.set(key, { award: awardText, rank: rankNum, isGrandPrix: false, playerNumber: pNum || prev?.playerNumber });
+        }
+      });
+    }
+
+    // 3) D1 invoices_pool 선수들 joins 및 award 일괄 업데이트
+    const existingInvoices = await c.env.DB.prepare('SELECT * FROM invoices_pool WHERE contestId = ?').bind(contestId).all();
+    
+    if (existingInvoices.results && existingInvoices.results.length > 0) {
+      for (const inv of existingInvoices.results as any[]) {
+        const pNum = inv.playerNumber ? String(inv.playerNumber).trim() : '';
+        const pUid = inv.playerUid ? String(inv.playerUid).trim() : '';
+        const pName = inv.playerName ? String(inv.playerName).trim() : '';
+
+        let joinsArr: any[] = [];
+        try {
+          joinsArr = typeof inv.joins === 'string' ? JSON.parse(inv.joins) : (inv.joins || []);
+        } catch (e) {}
+
+        let joinsUpdated = false;
+        const updatedJoins = joinsArr.map((j: any) => {
+          const cat = j.contestCategoryTitle || '';
+          const gr = j.contestGradeTitle || '';
+
+          const matched = 
+            (pNum && cat && awardMap.get(`${pNum}___${cat}`)) ||
+            (pUid && cat && awardMap.get(`${pUid}___${cat}`)) ||
+            (pName && cat && awardMap.get(`${pName}___${cat}`)) ||
+            (pNum && gr && awardMap.get(`${pNum}___${gr}`)) ||
+            (pUid && gr && awardMap.get(`${pUid}___${gr}`)) ||
+            null;
+
+          if (matched) {
+            joinsUpdated = true;
+            return {
+              ...j,
+              rank: matched.rank,
+              award: matched.award,
+              isGrandPrix: matched.isGrandPrix,
+              totalScore: matched.totalScore,
+            };
+          }
+          return j;
+        });
+
+        const overall = playerOverallMap.get(pUid) || playerOverallMap.get(pNum) || playerOverallMap.get(pName);
+
+        if (joinsUpdated || overall) {
+          const joinsStr = JSON.stringify(updatedJoins);
+          const highestAward = overall ? overall.award : (inv.award || null);
+          const topRank = overall ? overall.rank : (inv.rank || null);
+          const isGpInt = overall?.isGrandPrix ? 1 : (inv.isGrandPrix || 0);
+          const finalPlayerNum = overall?.playerNumber || inv.playerNumber || null;
+
+          statements.push(
+            c.env.DB.prepare(`
+              UPDATE invoices_pool 
+              SET joins = ?, award = ?, rank = ?, isGrandPrix = ?, playerNumber = COALESCE(?, playerNumber)
+              WHERE id = ?
+            `).bind(joinsStr, highestAward, topRank, isGpInt, finalPlayerNum, inv.id)
+          );
+        }
+      }
+    }
+
+    // 4) 그랑프리 챔피언들을 system_settings의 heroPlayers에 자동 동기화
+    const grandPrixCategories = categories.filter((cat: any) => cat.isOverall);
+    if (grandPrixCategories.length > 0) {
+      const heroPlayers: any[] = [];
+
+      for (const gpCat of grandPrixCategories) {
+        const playerList = Array.isArray(gpCat.results) ? gpCat.results : (typeof gpCat.results === 'string' ? JSON.parse(gpCat.results) : []);
+        const winner = playerList.find((r: any) => Number(r.playerRank) === 1) || playerList[0];
+        if (!winner) continue;
+
+        const pNum = winner.playerNumber ? String(winner.playerNumber).trim() : '';
+        const pUid = winner.playerUid ? String(winner.playerUid).trim() : '';
+        const pName = winner.playerName ? String(winner.playerName).trim() : '';
+
+        // D1 invoices_pool에서 해당 선수의 고화질 무대 사진 조회
+        let photoUrl = winner.playerPhotoUrl || '';
+        const invRow = existingInvoices.results?.find((inv: any) => 
+          (pUid && inv.playerUid === pUid) || 
+          (pNum && String(inv.playerNumber).trim() === pNum) || 
+          (pName && inv.playerName === pName)
+        ) as any;
+
+        if (invRow) {
+          photoUrl = invRow.stagePhoto1 || invRow.stagePhoto2 || invRow.playerPhotoUrl || photoUrl;
+          if (!photoUrl && invRow.playerPhotoUrls) {
+            try {
+              const urls = typeof invRow.playerPhotoUrls === 'string' ? JSON.parse(invRow.playerPhotoUrls) : invRow.playerPhotoUrls;
+              if (urls && urls.length > 0) photoUrl = urls[urls.length - 1];
+            } catch (e) {}
+          }
+        }
+
+        const heroId = `hero-gp-${(pUid || pNum || pName).toLowerCase().replace(/[^a-z0-9_-]/g, '')}`;
+        const realHeight = winner.playerHeight || invRow?.playerHeight || '';
+        const realWeight = winner.playerWeight || invRow?.playerWeight || '';
+        const stage1 = winner.stagePhoto1 || invRow?.stagePhoto1 || photoUrl;
+        const stage2 = winner.stagePhoto2 || invRow?.stagePhoto2 || '';
+
+        heroPlayers.push({
+          id: heroId,
+          heroName: pName,
+          heroClass: `${gpCat.categoryTitle} (오버롤)`,
+          heroHeight: realHeight ? String(realHeight) : '',
+          heroWeight: realWeight ? String(realWeight) : '',
+          heroGym: winner.playerGym || invRow?.playerGym || '용인시보디빌딩협회',
+          heroTitles: `2026 제9회 용인특례시 보디빌딩대회 ${gpCat.categoryTitle} 챔피언`,
+          heroImageUrl: stage1 || photoUrl || 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/player_photos/default-player-1_hero_section.png',
+          stagePhoto1: stage1,
+          stagePhoto2: stage2,
+          heroInstagram: '#',
+          heroYoutube: '#',
+          heroFacebook: '#'
+        });
+      }
+
+      if (heroPlayers.length > 0) {
+        const settingsRow = await c.env.DB.prepare("SELECT value FROM system_settings WHERE key = 'system_settings'").first() as { value: string } | null;
+        let currentSettings: any = {};
+        if (settingsRow?.value) {
+          try { currentSettings = JSON.parse(settingsRow.value); } catch (e) {}
+        }
+        currentSettings.heroPlayers = heroPlayers;
+
+        statements.push(
+          c.env.DB.prepare("INSERT OR REPLACE INTO system_settings (key, value, updatedAt) VALUES ('system_settings', ?, CURRENT_TIMESTAMP)")
+            .bind(JSON.stringify(currentSettings))
+        );
+      }
+    }
+
+    // D1 Batch 실행
+    if (statements.length > 0) {
+      await c.env.DB.batch(statements);
+    }
+
+    return c.json({
+      success: true,
+      categoryCount: categories.length,
+      statementsExecuted: statements.length,
+      message: `총 ${categories.length}개 종목/체급의 공식 성적이 Cloudflare D1 데이터베이스에 안전하게 영구 저장되었습니다.`
+    });
+  } catch (err: any) {
+    console.error('D1 공식 성적 저장 실패:', err);
+    return c.json({ error: 'D1 저장 실패: ' + err.message }, 500);
+  }
+});
+
+// 2. D1 공식 성적 조회 (공개 & 어드민 공용)
+app.get('/api/contests/:contestId/results', async (c) => {
+  try {
+    const contestId = c.req.param('contestId');
+    const records = await c.env.DB.prepare(`
+      SELECT * FROM contest_results 
+      WHERE contestId = ? 
+      ORDER BY isOverall ASC, categoryTitle ASC, gradeTitle ASC
+    `).bind(contestId).all();
+
+    const categories = (records.results || []).map((row: any) => {
+      let results: any[] = [];
+      try {
+        results = typeof row.resultsJson === 'string' ? JSON.parse(row.resultsJson) : (row.resultsJson || []);
+      } catch (e) {}
+
+      return {
+        docId: row.id,
+        contestId: row.contestId,
+        categoryId: row.categoryId,
+        categoryTitle: row.categoryTitle,
+        gradeId: row.gradeId,
+        gradeTitle: row.gradeTitle,
+        isOverall: row.isOverall === 1,
+        scoreType: row.scoreType,
+        results,
+        updatedAt: row.updatedAt,
+      };
+    });
+
+    return c.json({
+      success: true,
+      contestId,
+      count: categories.length,
+      categories,
+    });
+  } catch (err: any) {
+    console.error('D1 공식 성적 조회 에러:', err);
+    return c.json({ error: '조회 실패: ' + err.message }, 500);
+  }
+});
+
+// 3. D1 실시간 대회 기록 기반 자동 분류 시스템 (Legends / Champions / Youth Club 기수 자동 배정)
+app.get('/api/contests/:contestId/auto-roster', async (c) => {
+  try {
+    const contestId = c.req.param('contestId');
+    
+    // 1) D1 contest_results 조회
+    const records = await c.env.DB.prepare(`
+      SELECT * FROM contest_results 
+      WHERE contestId = ? 
+      ORDER BY isOverall ASC, categoryTitle ASC, gradeTitle ASC
+    `).bind(contestId).all();
+
+    const categories = (records.results || []).map((row: any) => {
+      let results: any[] = [];
+      try {
+        results = typeof row.resultsJson === 'string' ? JSON.parse(row.resultsJson) : (row.resultsJson || []);
+      } catch (e) {}
+      return {
+        ...row,
+        isOverall: row.isOverall === 1,
+        results
+      };
+    });
+
+    // 2) D1 invoices_pool 조회 (선수 프로필 & 사진)
+    const invoices = await c.env.DB.prepare(`
+      SELECT * FROM invoices_pool 
+      WHERE contestId = ?
+    `).bind(contestId).all();
+
+    const playerMap = new Map<string, any>();
+    (invoices.results || []).forEach((inv: any) => {
+      let joins = [];
+      try { joins = typeof inv.joins === 'string' ? JSON.parse(inv.joins) : (inv.joins || []); } catch(e) {}
+      
+      let photos = [];
+      try { photos = typeof inv.playerPhotoUrls === 'string' ? JSON.parse(inv.playerPhotoUrls) : (inv.playerPhotoUrls || []); } catch(e) {}
+
+      playerMap.set(inv.playerName.trim(), {
+        ...inv,
+        joins,
+        photos,
+        stagePhoto1: inv.stagePhoto1 || (joins.find((j: any) => j.stagePhoto1)?.stagePhoto1),
+        stagePhoto2: inv.stagePhoto2 || (joins.find((j: any) => j.stagePhoto2)?.stagePhoto2),
+      });
+    });
+
+    // 3) 자동 분류 컨테이너
+    const legendsMap = new Map<string, any>();
+    const championsMap = new Map<string, any>();
+    const youthMap = new Map<string, any>();
+
+    // 회차 계산 (예: 'vEsEClzzEHCnZ1d8azo1' -> 9회)
+    const editionNumber = 9;
+    const editionTitle = `제${editionNumber}회 용인특례시 대회`;
+    const youthGeneration = `YBBF 유스클럽 ${editionNumber}기`;
+
+    // 4) 카테고리별 성적 기반 전수 분류
+    for (const cat of categories) {
+      const isStudentCategory = cat.categoryTitle.includes('학생부') || cat.categoryTitle.includes('고등부') || cat.categoryTitle.includes('유스');
+
+      for (const r of (cat.results || [])) {
+        if (!r.playerName) continue;
+        const name = r.playerName.trim();
+        const pInfo = playerMap.get(name);
+
+        const photo = r.stagePhoto1 || r.stagePhoto2 || pInfo?.stagePhoto1 || pInfo?.stagePhoto2 || r.photoUrl || pInfo?.playerPhotoUrl || (pInfo?.photos && pInfo.photos[0]) || '';
+        const stage1 = r.stagePhoto1 || pInfo?.stagePhoto1 || photo;
+        const stage2 = r.stagePhoto2 || pInfo?.stagePhoto2 || photo;
+
+        const isFirstPlace = r.playerRank === 1 || (r.award && r.award.includes('1위'));
+        const isGrandPrix = (cat.isOverall || cat.categoryTitle.includes('그랑프리')) 
+          ? (r.playerRank === 1 || (r.award && r.award.includes('그랑프리')))
+          : (r.award && (r.award.includes('그랑프리') || r.award.includes('Overall')));
+
+        const realHeight = r.playerHeight || pInfo?.playerHeight || null;
+        const realWeight = r.playerWeight || pInfo?.playerWeight || null;
+
+        // A. 🏆 [Legends] 그랑프리 자동 분류 (오버롤 챔피언)
+        if (isGrandPrix) {
+          if (!legendsMap.has(name)) {
+            legendsMap.set(name, {
+              id: `legend-${name}`,
+              name,
+              nameEn: name.toUpperCase(),
+              number: r.playerNumber || pInfo?.playerNumber || null,
+              gym: r.playerGym || pInfo?.playerGym || '용인시보디빌딩협회',
+              height: realHeight,
+              weight: realWeight,
+              stagePhoto1: stage1,
+              stagePhoto2: stage2,
+              profileImage: stage1 || photo,
+              class: cat.categoryTitle,
+              isGrandPrix: true,
+              edition: editionNumber,
+              titles: []
+            });
+          }
+          legendsMap.get(name).titles.push({
+            year: 2026,
+            competition: editionTitle,
+            result: r.award || '오버롤 그랑프리',
+            class: cat.categoryTitle
+          });
+        }
+
+        // B. 🥇 [Champions] 체급 1위 우승자 자동 분류
+        if (isFirstPlace || isGrandPrix) {
+          if (!championsMap.has(name)) {
+            championsMap.set(name, {
+              id: `champ-${name}`,
+              name,
+              nameEn: name.toUpperCase(),
+              number: r.playerNumber || pInfo?.playerNumber || null,
+              gym: r.playerGym || pInfo?.playerGym || '용인시보디빌딩협회',
+              height: realHeight,
+              weight: realWeight,
+              stagePhoto1: stage1,
+              stagePhoto2: stage2,
+              photoUrl: stage1 || photo,
+              isGrandPrix,
+              edition: editionNumber,
+              categories: []
+            });
+          }
+        }
+
+        // 챔피언 선수의 모든 출전 부문 기록 집계 (1위 우승, 2위 준우승 등)
+        if (championsMap.has(name)) {
+          const champObj = championsMap.get(name);
+          const awardText = r.award || (isGrandPrix ? '오버롤 그랑프리' : `${r.playerRank}위`);
+          const existing = champObj.categories.find((c: any) => c.categoryTitle === cat.categoryTitle && c.gradeTitle === cat.gradeTitle);
+          if (!existing) {
+            champObj.categories.push({
+              categoryTitle: cat.categoryTitle,
+              gradeTitle: cat.gradeTitle,
+              isOverall: isGrandPrix,
+              rank: r.playerRank,
+              award: awardText,
+              totalScore: r.totalScore
+            });
+          }
+        }
+
+        // C. 🌱 [Youth Club] 학생부 출전 선수는 무조건 유스클럽 해당 기수에 자동 가입
+        if (isStudentCategory) {
+          if (!youthMap.has(name)) {
+            youthMap.set(name, {
+              id: `youth-${editionNumber}-${name}`,
+              name,
+              school: r.playerGym || pInfo?.playerGym || '용인시 학생부',
+              club: youthGeneration,
+              generation: editionNumber,
+              badge: 'YBBF_YOUTH',
+              class: cat.gradeTitle || cat.categoryTitle,
+              stagePhoto1: stage1,
+              stagePhoto2: stage2,
+              image: stage1 || photo,
+              rank: r.playerRank,
+              isGrandPrix,
+              achievements: []
+            });
+          }
+          const youthEntry = youthMap.get(name);
+          const awardTitle = isGrandPrix 
+            ? `${editionTitle} 학생부 오버롤 그랑프리` 
+            : `${editionTitle} ${cat.categoryTitle} ${cat.gradeTitle ? `(${cat.gradeTitle}) ` : ''}${r.playerRank ? `${r.playerRank}위` : '참가'}`;
+          
+          if (youthEntry && !youthEntry.achievements.includes(awardTitle)) {
+            youthEntry.achievements.push(awardTitle);
+          }
+        }
+      }
+    }
+
+    const getLegendPriority = (l: any) => {
+      const cls = (l.class || '').toLowerCase();
+      if (cls.includes('일반부') || (cls.includes('보디빌딩') && !cls.includes('클래식') && !cls.includes('마스터즈') && !cls.includes('학생부'))) return 1;
+      if (cls.includes('비키니') || cls.includes('모노키니') || cls.includes('여자')) return 2;
+      if (cls.includes('클래식')) return 3;
+      if (cls.includes('피지크')) return 4;
+      if (cls.includes('스포츠 모델') || cls.includes('스포츠모델') || cls.includes('모델')) return 5;
+      if (cls.includes('마스터즈') || cls.includes('장년부')) return 6;
+      if (cls.includes('학생부') || cls.includes('유스') || cls.includes('고등부')) return 7;
+      return 99;
+    };
+
+    const legends = Array.from(legendsMap.values()).sort((a, b) => getLegendPriority(a) - getLegendPriority(b));
+    const champions = Array.from(championsMap.values()).sort((a, b) => (b.isGrandPrix ? 1 : 0) - (a.isGrandPrix ? 1 : 0));
+    const youthMembers = Array.from(youthMap.values()).sort((a, b) => (a.rank || 99) - (b.rank || 99));
+
+    return c.json({
+      success: true,
+      contestId,
+      edition: {
+        number: editionNumber,
+        title: editionTitle,
+        year: 2026,
+        youthGeneration
+      },
+      counts: {
+        legends: legends.length,
+        champions: champions.length,
+        youthMembers: youthMembers.length,
+        categories: categories.length
+      },
+      legends,
+      champions,
+      youthMembers
+    });
+  } catch (err: any) {
+    console.error('D1 자동 로스터 분류 에러:', err);
+    return c.json({ error: '자동 분류 실패: ' + err.message }, 500);
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 💎 [Showcase API] 단일 선수 쇼케이스 인보이스 D1 공식 데이터 조회
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+app.get('/api/invoices/showcase/:idOrName', async (c) => {
+  try {
+    const rawParam = decodeURIComponent(c.req.param('idOrName')).trim();
+    const cleanName = rawParam.replace(/^(champ-|legend-|youth-\d+-|youth-)/, '');
+
+    const row = await c.env.DB.prepare(`
+      SELECT * FROM invoices_pool 
+      WHERE id = ? OR playerUid = ? OR playerName = ? OR playerName = ?
+      LIMIT 1
+    `).bind(rawParam, rawParam, rawParam, cleanName).first() as any;
+
+    if (!row) {
+      return c.json({ error: '선수를 찾을 수 없습니다.' }, 404);
+    }
+
+    // JSON 필드 파싱
+    let joins: any[] = [];
+    if (row.joins) {
+      try { joins = typeof row.joins === 'string' ? JSON.parse(row.joins) : row.joins; } catch (e) {}
+    }
+
+    let playerPhotoUrls: string[] = [];
+    if (row.playerPhotoUrls) {
+      try { playerPhotoUrls = typeof row.playerPhotoUrls === 'string' ? JSON.parse(row.playerPhotoUrls) : row.playerPhotoUrls; } catch (e) {}
+    }
+
+    return c.json({
+      success: true,
+      invoice: {
+        ...row,
+        joins,
+        playerPhotoUrls,
+        stagePhoto1: row.stagePhoto1 || row.playerPhotoUrl || '',
+        stagePhoto2: row.stagePhoto2 || '',
+        isPriceCheck: row.isPriceCheck === 1,
+        isCanceled: row.isCanceled === 1,
+        contestTitle: '제9회 용인특례시 협회장배 보디빌딩대회',
+        contestDate: '2026-08-29',
+        contestLocation: '용인시청 에이스홀'
+      }
+    });
+  } catch (err: any) {
+    console.error('Showcase 조회 에러:', err);
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🏢 [D1 Sponsors API] 스폰서 목록 조회 & 관리
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+app.get('/api/sponsors', async (c) => {
+  try {
+    const contestId = c.req.query('contestId') || 'vEsEClzzEHCnZ1d8azo1';
+    const status = c.req.query('status');
+
+    let query = 'SELECT * FROM contest_sponsors WHERE contest_id = ?';
+    const params: any[] = [contestId];
+
+    if (status) {
+      query += ' AND status = ?';
+      params.push(status);
+    }
+    query += ' ORDER BY sort_order ASC, weight DESC, created_at DESC';
+
+    const { results } = await c.env.DB.prepare(query).bind(...params).all();
+    const sponsors = (results || []).map((row: any) => {
+      let socials = {};
+      if (row.socials_json) {
+        try { socials = JSON.parse(row.socials_json); } catch (e) {}
+      }
+      return {
+        id: row.id,
+        contestId: row.contest_id,
+        name: row.name,
+        tag: row.tag,
+        slogan: row.slogan,
+        desc: row.desc,
+        imageUrl: row.image_url,
+        videoUrl: row.video_url,
+        linkUrl: row.link_url,
+        mediaType: row.media_type,
+        status: row.status,
+        address: row.address,
+        contactPerson: row.contact_person,
+        phone: row.phone,
+        email: row.email,
+        businessNumber: row.business_number,
+        socials,
+        weight: row.weight,
+        durationSeconds: row.duration_seconds,
+        sortOrder: row.sort_order,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      };
+    });
+
+    return c.json({ success: true, count: sponsors.length, sponsors });
+  } catch (err: any) {
+    return c.json({ error: '스폰서 조회 실패: ' + err.message }, 500);
+  }
+});
+
+app.post('/api/sponsors/sync-from-firestore', async (c) => {
+  try {
+    const body = await c.req.json();
+    const contestId = body.contestId || 'vEsEClzzEHCnZ1d8azo1';
+    const sponsors = body.sponsors || [];
+
+    if (!Array.isArray(sponsors)) {
+      return c.json({ error: 'sponsors 배열이 필요합니다.' }, 400);
+    }
+
+    const stmts = sponsors.map((s: any, idx: number) => {
+      const id = s.id || `sp_${Date.now()}_${idx}`;
+      const socialsJson = JSON.stringify(s.socials || (s.linkUrl ? { homepage: s.linkUrl } : {}));
+      return c.env.DB.prepare(`
+        INSERT INTO contest_sponsors (
+          id, contest_id, name, tag, slogan, desc, image_url, video_url, link_url,
+          media_type, status, address, contact_person, phone, email, business_number,
+          socials_json, weight, duration_seconds, sort_order, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+9 hours'))
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          tag = excluded.tag,
+          slogan = excluded.slogan,
+          desc = excluded.desc,
+          image_url = excluded.image_url,
+          video_url = excluded.video_url,
+          link_url = excluded.link_url,
+          media_type = excluded.media_type,
+          status = excluded.status,
+          address = excluded.address,
+          contact_person = excluded.contact_person,
+          phone = excluded.phone,
+          email = excluded.email,
+          business_number = excluded.business_number,
+          socials_json = excluded.socials_json,
+          weight = excluded.weight,
+          duration_seconds = excluded.duration_seconds,
+          sort_order = excluded.sort_order,
+          updated_at = datetime('now', '+9 hours')
+      `).bind(
+        id,
+        contestId,
+        s.name || '',
+        s.tag || 'OFFICIAL',
+        s.slogan || '',
+        s.desc || '',
+        s.imageUrl || '',
+        s.videoUrl || '',
+        s.linkUrl || (s.socials?.homepage || ''),
+        s.mediaType || (s.videoUrl ? 'VIDEO' : 'IMAGE'),
+        s.status || 'active',
+        s.address || '',
+        s.contactPerson || '',
+        s.phone || '',
+        s.email || '',
+        s.businessNumber || '',
+        socialsJson,
+        s.weight || 1,
+        Number(s.durationSeconds || 5),
+        idx
+      );
+    });
+
+    if (stmts.length > 0) {
+      await c.env.DB.batch(stmts);
+    }
+
+    return c.json({ success: true, message: `${stmts.length}개 스폰서 D1 동기화 완료` });
+  } catch (err: any) {
+    return c.json({ error: '스폰서 동기화 실패: ' + err.message }, 500);
+  }
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 📋 [D1 Pre-Registrations API] 2027 제10회 사전 접수 D1 관리
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+app.get('/api/pre-registrations', async (c) => {
+  try {
+    const edition = Number(c.req.query('edition') || 10);
+    const { results } = await c.env.DB.prepare(`
+      SELECT * FROM pre_registrations 
+      WHERE contest_edition = ?
+      ORDER BY created_at DESC
+    `).bind(edition).all();
+
+    const registrations = (results || []).map((row: any) => {
+      let desiredCategories = [];
+      if (row.desired_categories_json) {
+        try { desiredCategories = JSON.parse(row.desired_categories_json); } catch (e) {}
+      }
+      return {
+        id: row.id,
+        contestEdition: row.contest_edition,
+        name: row.name,
+        phone: row.phone,
+        email: row.email,
+        gender: row.gender,
+        birthDate: row.birth_date,
+        gym: row.gym,
+        desiredCategories,
+        message: row.message,
+        status: row.status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      };
+    });
+
+    return c.json({ success: true, count: registrations.length, registrations });
+  } catch (err: any) {
+    return c.json({ error: '사전 접수자 조회 실패: ' + err.message }, 500);
+  }
+});
+
+app.post('/api/pre-registrations', async (c) => {
+  try {
+    const body = await c.req.json();
+    const id = body.id || `pre_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const edition = Number(body.contestEdition || 10);
+    const categoriesJson = JSON.stringify(body.desiredCategories || []);
+
+    await c.env.DB.prepare(`
+      INSERT INTO pre_registrations (
+        id, contest_edition, name, phone, email, gender, birth_date, gym,
+        desired_categories_json, message, status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now', '+9 hours'), datetime('now', '+9 hours'))
+    `).bind(
+      id,
+      edition,
+      body.name || '',
+      body.phone || '',
+      body.email || '',
+      body.gender || '남성',
+      body.birthDate || '',
+      body.gym || '',
+      categoriesJson,
+      body.message || '',
+      body.status || 'pending'
+    ).run();
+
+    return c.json({ success: true, id, message: '2027 제10회 사전 접수가 D1에 성공적으로 등록되었습니다.' });
+  } catch (err: any) {
+    return c.json({ error: '사전 접수 등록 실패: ' + err.message }, 500);
+  }
+});
+
+app.delete('/api/pre-registrations/:id', async (c) => {
+  try {
+    const id = c.req.param('id');
+    await c.env.DB.prepare(`DELETE FROM pre_registrations WHERE id = ?`).bind(id).run();
+    return c.json({ success: true, message: '삭제 완료' });
+  } catch (err: any) {
+    return c.json({ error: '삭제 실패: ' + err.message }, 500);
   }
 });
 

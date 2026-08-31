@@ -48,3 +48,34 @@ export async function uploadToR2(file: File, playerUidOrFolder: string, isFolder
     throw new Error(`R2 업로드에 실패했습니다: ${err.message || '네트워크 오류'}`);
   }
 }
+
+/**
+ * Cloudflare R2 버킷에서 이미지 파일 실제 영구 삭제
+ * @param fileUrl 삭제할 R2 이미지 전체 URL
+ */
+export async function deleteFromR2(fileUrl: string): Promise<boolean> {
+  if (!fileUrl || typeof fileUrl !== 'string' || !fileUrl.includes('/api/photos/')) {
+    return false;
+  }
+
+  const mediaUrl = import.meta.env.VITE_MEDIA_API_URL || 'https://ybbf-media-worker.jbkim.workers.dev';
+
+  try {
+    const res = await fetch(`${mediaUrl}/api/delete-photo`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ url: fileUrl })
+    });
+
+    if (res.ok) {
+      console.log('🗑️ [R2 스토리지 정리] 이전 가공 사진 파일 실제 삭제 성공:', fileUrl);
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.warn('R2 파일 삭제 통신 오류 (무시됨):', err);
+    return false;
+  }
+}

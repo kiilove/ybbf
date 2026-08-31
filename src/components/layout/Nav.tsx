@@ -7,11 +7,12 @@ import { useAuthStore } from '../../store/useAuthStore';
 const menuItems = [
   { name: '홈', path: '/', image: 'https://picsum.photos/1000/1200?random=11' },
   { name: '협회 소개', path: '/about', image: 'https://picsum.photos/1000/1200?random=20' },
-  { name: '대회', path: '/competition', image: 'https://picsum.photos/1000/1200?random=16' },
-  { name: '레전드', path: '/legends', image: 'https://picsum.photos/1000/1200?random=12' },
+  { name: '대회 안내', path: '/competition', image: 'https://picsum.photos/1000/1200?random=16' },
+  { name: '명예의 전당', path: '/champions', image: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg' },
+  { name: '역대 레전드', path: '/legends', image: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_a8fc9bfd-da91-4491-973c-e8373f727dea/1787973297495_Athlete_striking_side_chest_pose_202608291214.jpeg' },
   { name: '미디어', path: '/media', image: 'https://picsum.photos/1000/1200?random=13' },
+  { name: '공식 스폰서', path: '/sponsors', image: 'https://picsum.photos/1000/1200?random=18' },
   { name: 'YBBF 유스', path: '/youth', image: 'https://picsum.photos/1000/1200?random=14' },
-  { name: '스토어', path: '/store', image: 'https://picsum.photos/1000/1200?random=15' },
 ];
 
 export default function Nav() {

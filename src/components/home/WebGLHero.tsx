@@ -2,15 +2,14 @@ import { useEffect, useRef } from 'react';
 import { Renderer, Program, Mesh, Triangle, Texture } from 'ogl';
 
 /* ────────────────────────────────────────────────
-   WebGLHero — 선수 이미지 + 배경 효과 통합 렌더링
+   WebGLHero — 챔피언 선수 이미지 + 다크 시네마틱 무대 후광 통합 렌더링
    
-   선수 이미지를 셰이더 안에서 렌더링하여:
-   1. 루마키(Luma Key)로 검정 배경을 완벽히 제거
-   2. 배경 효과(후광, 펄스, 성운)와 자연스럽게 합성
-   3. 선수 사진은 절대 왜곡/변형하지 않음
+   • 선수의 브론즈 스킨톤과 근육 데피니션을 100% 자연스럽게 보존
+   • 선수 뒤쪽과 외곽 스모크에만 YBBF 네온 라임 / 에메랄드 웨이브 후광 집중
+   • 선수 전환 및 포즈(StagePhoto 1/2) 변경 시 즉시 100% 텍스처 교체 동기화
    ──────────────────────────────────────────────── */
 
-const BASE_IMAGE = '/hero_section.png';
+const DEFAULT_BASE_IMAGE = 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg';
 
 const vertex = /* glsl */ `
   attribute vec2 position;
@@ -30,7 +29,6 @@ const fragment = /* glsl */ `
   uniform vec2 uRes;
   uniform float uAspect;
   uniform float uBaseAspect;
-  uniform float uThemeTransition; // 0.0: White, 1.0: Dark
 
   varying vec2 vUv;
 
@@ -62,7 +60,7 @@ const fragment = /* glsl */ `
     return v;
   }
 
-  /* Cover UV: 이미지를 화면에 맞추되 비율 유지 (cover 방식) */
+  /* Cover UV: 비율 유지 중앙 배치 */
   vec2 coverUv(vec2 uv, float screenAsp, float imgAsp) {
     vec2 st = uv - 0.5;
     if (screenAsp > imgAsp) {
@@ -74,120 +72,101 @@ const fragment = /* glsl */ `
   }
 
   void main() {
+    float t = uTime * 0.5;
     vec2 uv = vUv;
-    float t = uTime;
-    vec2 aspUv = vec2(uv.x * uAspect, uv.y);
+    vec2 centeredUv = (uv - 0.5) * vec2(uAspect, 1.0);
+    float dist = length(centeredUv);
 
-    /* ── 1. 배경 효과 ── */
-    
-    // 후광 효과 계산
-    vec2 heroCenter = vec2(0.5 * uAspect, 0.55);
-    float heroDist = length(aspUv - heroCenter);
-    float coreGlow = exp(-heroDist * 1.8) * 0.1;
-    float aura = exp(-heroDist * 0.7) * 0.05;
+    /* ── 1. 🌊 실시간 시그니처 에너지 웨이브 & 앰비언트 ── */
+    float wave1 = sin(centeredUv.x * 4.0 + t * 1.5 + sin(centeredUv.y * 3.0 + t * 0.7)) * 0.5 + 0.5;
+    float wave2 = sin(centeredUv.y * 4.5 - t * 1.2 + cos(centeredUv.x * 3.5 + t * 0.5)) * 0.5 + 0.5;
+    float wave3 = sin(dist * 6.0 - t * 1.8) * 0.5 + 0.5;
+    float waves = (wave1 * 0.45 + wave2 * 0.35 + wave3 * 0.20);
 
-    // ── 얇고 일정한 선형 파동 (Thin Linear Contours) ──
-    vec2 waveUv = aspUv;
-    float noise = fbm(waveUv * 1.5 + vec2(t * 0.03, t * 0.01)) * 0.5
-                + fbm(waveUv * 3.0 - vec2(t * 0.01, t * 0.02)) * 0.25;
-    
-    float contourFreq = 40.0; 
-    float n = aspUv.y * contourFreq + noise * 15.0;
-    
-    float fr = fract(n);
-    float lineDist = min(fr, 1.0 - fr);
-    float contourLine = smoothstep(0.03, 0.0, lineDist);
-    
-    float sweep = sin(aspUv.x * 2.0 - t * 1.5) * 0.5 + 0.5;
-    float sweepGlow = smoothstep(0.7, 1.0, sweep);
-    
-    // ── 테마별 컬러 세팅 (Light vs Dark) ──
-    
-    // Light Theme
-    vec3 lightBgColor = vec3(0.96, 0.96, 0.96);
-    vec3 lightLineCol = mix(vec3(0.85, 0.85, 0.85), vec3(0.7, 0.9, 0.0), sweepGlow * 0.8);
-    vec3 lightGlow = vec3(0.9, 1.0, 0.5) * coreGlow + vec3(0.9) * aura;
-    
-    // Dark Theme
-    vec3 darkBgColor = vec3(0.04, 0.04, 0.04);
-    vec3 darkLineCol = mix(vec3(0.12, 0.12, 0.12), vec3(0.8, 1.0, 0.0), sweepGlow * 0.9);
-    vec3 darkGlow = vec3(0.8, 1.0, 0.0) * coreGlow + vec3(0.6, 0.8, 0.0) * aura;
-    
-    // 스크롤에 따른 테마 혼합
-    vec3 baseBgColor = mix(lightBgColor, darkBgColor, uThemeTransition);
-    vec3 finalLineCol = mix(lightLineCol, darkLineCol, uThemeTransition);
-    vec3 glowColor = mix(lightGlow, darkGlow, uThemeTransition);
+    // 후광 펄스 (Pulse Aura)
+    float pulse = sin(t * 1.2 - dist * 3.0) * 0.5 + 0.5;
+    float aura = exp(-dist * 1.8) * (0.5 + pulse * 0.5);
 
-    // 배경 합성
-    vec3 bg = baseBgColor + glowColor;
-    bg = mix(bg, finalLineCol, contourLine);
-    
-    // 중심부 dimming
-    vec2 centerDim = vec2(0.5, 0.4);
-    float dimDist = length((uv - centerDim) * vec2(1.2, 1.0));
-    float dimMask = smoothstep(0.15, 0.55, dimDist);
-    
-    vec3 dimColor = mix(vec3(0.98), vec3(0.0), uThemeTransition);
-    bg = mix(dimColor, bg, dimMask);
-    
-    // 비네팅
-    vec2 vigUv = (uv - 0.5) * 2.0;
-    float vig = 1.0 - dot(vigUv, vigUv) * mix(0.1, 0.35, uThemeTransition);
-    bg *= clamp(vig, 0.0, 1.0);
+    // 역광 림라이트 (Rim Light)
+    float rimAngle = dot(normalize(centeredUv + vec2(0.0, 0.2)), vec2(0.0, 1.0));
+    float rimLight = smoothstep(0.1, 0.9, rimAngle) * exp(-dist * 1.4);
 
-    /* ── 2. 선수 이미지 (절대 왜곡 없음) ── */
-    
-    // contain 방식: 이미지 전체가 보이되 비율 유지
-    vec2 imgUv = uv - 0.5;
-    float scaleRatio;
-    if (uAspect > uBaseAspect) {
-      // 화면이 더 넓음 → 높이 기준
-      scaleRatio = 1.0;
-      imgUv.x *= uAspect / uBaseAspect;
-    } else {
-      // 화면이 더 높음 → 너비 기준
-      scaleRatio = 1.0;
-      imgUv.y *= uBaseAspect / uAspect;
-    }
-    // 이미지를 위쪽으로 올림 (하단에 텍스트 공간 확보)
-    imgUv.y += 0.12;
-    imgUv += 0.5;
-    
-    // 이미지 범위 체크
-    bool inBounds = imgUv.x > 0.0 && imgUv.x < 1.0 && imgUv.y > 0.0 && imgUv.y < 1.0;
-    
+    // 컬러 팔레트
+    vec3 darkBase = vec3(0.015, 0.015, 0.02);
+    vec3 waveColor = vec3(0.08, 0.28, 0.16);   // 은은한 에메랄드 웨이브
+    vec3 neonAccent = vec3(0.60, 0.95, 0.12);  // 시그니처 네온 라임
+    vec3 auraColor = vec3(0.05, 0.15, 0.25);   // 딥 사이언 앰비언트
+
+    vec3 bg = darkBase;
+    bg += waveColor * waves * 0.50;
+    bg += auraColor * aura * 0.60;
+    bg += neonAccent * rimLight * 0.35;
+    bg *= (1.0 - smoothstep(0.45, 1.3, dist));
+
+    /* ── 2. 📸 선수 사진 렌더링 & 가장자리 페이드 ── */
+    vec2 imgUv = coverUv(uv, uAspect, uBaseAspect);
+
     vec3 imgColor = vec3(0.0);
-    float imgAlpha = 0.0;
-    
-    if (inBounds) {
+    float edgeMask = 0.0;
+
+    if (imgUv.x >= 0.0 && imgUv.x <= 1.0 && imgUv.y >= 0.0 && imgUv.y <= 1.0) {
       vec4 tex = texture2D(uBase, imgUv);
       imgColor = tex.rgb;
-      
-      // 사용자님이 제공해주신 투명 배경 PNG의 고유 알파 채널을 그대로 사용!
-      // 지저분한 루마키(Luma Key)가 전혀 필요 없습니다.
-      imgAlpha = tex.a;
-      
-      // 가장자리 페이드 - 흰 배경에서는 페이드 없이 하단만 부드럽게 페이드
-      float bottomFade = smoothstep(0.0, 0.2, imgUv.y);
-      imgAlpha *= bottomFade;
-      
-      // Lando Norris 스타일: 흑백 & 고대비 (흰 배경에 맞게 너무 어둡지 않게)
-      float gray = dot(imgColor, vec3(0.299, 0.587, 0.114));
-      imgColor = vec3(gray);
-      imgColor = (imgColor - 0.5) * 1.2 + 0.55;
+
+      // 스튜디오 벽면/삼각대 등 외곽 사각형 영역 딥 블랙 페이드아웃
+      float fadeBottom = smoothstep(0.0, 0.06, imgUv.y);
+      float fadeTop = smoothstep(1.0, 0.94, imgUv.y);
+      float fadeLeft = smoothstep(0.05, 0.28, imgUv.x);
+      float fadeRight = smoothstep(0.95, 0.72, imgUv.x);
+      edgeMask = fadeBottom * fadeTop * fadeLeft * fadeRight;
+
+      imgColor *= edgeMask;
     }
 
-    /* ── 3. 최종 합성 ── */
-    // 배경 위에 선수 이미지를 알파 블렌딩
-    vec3 finalColor = mix(bg, imgColor, imgAlpha);
+    /* ── 3. ✨ 스마트 블렌딩 (인물 스킨톤 보호 + 배경 웨이브 합성) ── */
+    float centerMask = smoothstep(0.12, 0.55, dist);
+    vec3 activeWave = bg * mix(0.15, 1.0, centerMask);
+
+    vec3 finalColor = 1.0 - (1.0 - activeWave) * (1.0 - imgColor);
 
     gl_FragColor = vec4(finalColor, 1.0);
   }
 `;
 
-export default function WebGLHero() {
+interface WebGLHeroProps {
+  imageUrl?: string;
+}
+
+export default function WebGLHero({ imageUrl }: WebGLHeroProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const glRef = useRef<any>(null);
+  const programRef = useRef<Program | null>(null);
+
+  const targetImage = imageUrl || DEFAULT_BASE_IMAGE;
+
+  // 텍스처 업데이트 Effect (선수/포즈 전환 시 즉시 새 텍스처 바인딩)
+  useEffect(() => {
+    if (!glRef.current || !programRef.current) return;
+    const gl = glRef.current;
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      if (programRef.current) {
+        const newTexture = new Texture(gl, {
+          image: img,
+          generateMipmaps: true,
+          minFilter: gl.LINEAR_MIPMAP_LINEAR,
+        });
+        (newTexture as any).needsUpdate = true;
+        programRef.current.uniforms.uBase.value = newTexture;
+        const baseAspect = img.naturalWidth / img.naturalHeight;
+        programRef.current.uniforms.uBaseAspect.value = baseAspect;
+      }
+    };
+    img.src = targetImage;
+  }, [targetImage]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -202,9 +181,9 @@ export default function WebGLHero() {
       alpha: false,
     });
     const gl = renderer.gl;
-    gl.clearColor(0.96, 0.96, 0.96, 1);
+    glRef.current = gl;
+    gl.clearColor(0.015, 0.015, 0.02, 1);
 
-    // 텍스처 로딩
     const texture = new Texture(gl, {
       generateMipmaps: true,
       minFilter: gl.LINEAR_MIPMAP_LINEAR,
@@ -215,10 +194,13 @@ export default function WebGLHero() {
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       texture.image = img;
+      (texture as any).needsUpdate = true;
       baseAspect = img.naturalWidth / img.naturalHeight;
-      program.uniforms.uBaseAspect.value = baseAspect;
+      if (programRef.current) {
+        programRef.current.uniforms.uBaseAspect.value = baseAspect;
+      }
     };
-    img.src = BASE_IMAGE;
+    img.src = targetImage;
 
     const geometry = new Triangle(gl);
     const program = new Program(gl, {
@@ -230,9 +212,9 @@ export default function WebGLHero() {
         uRes:        { value: [container.clientWidth, container.clientHeight] },
         uAspect:     { value: container.clientWidth / container.clientHeight },
         uBaseAspect: { value: 1.0 },
-        uThemeTransition: { value: 0.0 }, // 초깃값 밝은 테마
       },
     });
+    programRef.current = program;
 
     const mesh = new Mesh(gl, { geometry, program });
 
@@ -240,48 +222,37 @@ export default function WebGLHero() {
       const w = container.clientWidth;
       const h = container.clientHeight;
       renderer.setSize(w, h);
-      program.uniforms.uAspect.value = w / h;
       program.uniforms.uRes.value = [w, h];
+      program.uniforms.uAspect.value = w / h;
     };
     window.addEventListener('resize', resize);
+    resize();
 
-    let disposed = false;
-    const t0 = performance.now();
-
-    const update = () => {
-      if (disposed) return;
-      requestAnimationFrame(update);
-      program.uniforms.uTime.value = (performance.now() - t0) * 0.001;
-      
-      // 스크롤에 따른 테마 보간 (스크롤을 내릴수록 1.0에 가까워짐 -> 다크 테마)
-      const maxScroll = window.innerHeight * 1.0; 
-      const targetTransition = Math.min(Math.max(window.scrollY / maxScroll, 0.0), 1.0);
-      program.uniforms.uThemeTransition.value += (targetTransition - program.uniforms.uThemeTransition.value) * 0.1;
-
-      try {
-        renderer.render({ scene: mesh });
-      } catch (err) {
-        console.error('[WebGLHero] render error:', err);
-        disposed = true;
-      }
+    let animationId: number;
+    let startTime = performance.now();
+    const update = (now: number) => {
+      animationId = requestAnimationFrame(update);
+      program.uniforms.uTime.value = (now - startTime) * 0.001;
+      renderer.render({ scene: mesh });
     };
-    requestAnimationFrame(update);
+    animationId = requestAnimationFrame(update);
 
     return () => {
-      disposed = true;
       window.removeEventListener('resize', resize);
-      try { program.remove(); } catch (_) { /* noop */ }
-      canvas.width = 0;
-      canvas.height = 0;
+      cancelAnimationFrame(animationId);
     };
   }, []);
 
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 z-0 pointer-events-none overflow-hidden"
+      className="absolute inset-0 w-full h-full pointer-events-none bg-[#030306]"
+      style={{ zIndex: 0 }}
     >
-      <canvas ref={canvasRef} className="w-full h-full block" />
+      <canvas
+        ref={canvasRef}
+        className="w-full h-full block"
+      />
     </div>
   );
 }

@@ -6,6 +6,10 @@ export interface JoinItem {
   contestCategoryTitle: string;
   contestGradeId: string;
   contestGradeTitle: string;
+  playerNumber?: string | number;
+  rank?: number | string;
+  award?: string;
+  isGrandPrix?: boolean;
 }
 
 export interface Registration {
@@ -26,6 +30,10 @@ export interface Registration {
   selectedPhotoUrlsJson?: string;
   stagePhoto1?: string;
   stagePhoto2?: string;
+  publicStagePhoto1?: string;
+  publicStagePhoto2?: string;
+  publicPhotoUrls?: string[];
+  publicPhotoUrlsJson?: string;
   playerService: boolean;
   joins: JoinItem[];
   contestPriceSum: number;
@@ -98,6 +106,73 @@ export const contestService = {
     return await res.json();
   },
 
+  // 1-1. Firestore 직접 조회 Fallback (D1 오프라인 또는 네트워크 오류 시 즉시 기동)
+  async fetchRegistrationsFromFirestore(contestId?: string): Promise<Registration[]> {
+    const invoicesRef = collection(db, 'invoices_pool');
+    let q = query(invoicesRef);
+    if (contestId && contestId !== 'all') {
+      q = query(invoicesRef, where('contestId', '==', contestId));
+    }
+    const snapshot = await getDocs(q);
+    const list: Registration[] = [];
+
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+      let photoUrls: string[] = [];
+      if (Array.isArray(data.playerPhotoUrls)) {
+        photoUrls = data.playerPhotoUrls;
+      } else if (typeof data.playerPhotoUrlsJson === 'string' && data.playerPhotoUrlsJson) {
+        try { photoUrls = JSON.parse(data.playerPhotoUrlsJson); } catch (e) {}
+      } else if (data.playerPhotoUrl) {
+        photoUrls = [data.playerPhotoUrl];
+      }
+
+      let selectedUrls: string[] = [];
+      if (Array.isArray(data.selectedPhotoUrls)) {
+        selectedUrls = data.selectedPhotoUrls;
+      } else if (typeof data.selectedPhotoUrlsJson === 'string' && data.selectedPhotoUrlsJson) {
+        try { selectedUrls = JSON.parse(data.selectedPhotoUrlsJson); } catch (e) {}
+      }
+
+      const stagePhoto1 = data.stagePhoto1 || selectedUrls[0] || '';
+      const stagePhoto2 = data.stagePhoto2 || selectedUrls[1] || '';
+
+      list.push({
+        id: docSnap.id,
+        playerUid: data.playerUid || docSnap.id,
+        playerName: data.playerName || '이름 없음',
+        playerGender: data.playerGender || 'm',
+        playerBirth: data.playerBirth || '',
+        playerTel: data.playerTel || '',
+        playerEmail: data.playerEmail || '',
+        playerGym: data.playerGym || '',
+        playerText: data.playerText || '',
+        playerPhotoUrl: stagePhoto1 || stagePhoto2 || photoUrls[0] || '',
+        playerPhotoUrls: photoUrls,
+        photos: photoUrls,
+        selectedPhotoUrls: [stagePhoto1, stagePhoto2],
+        stagePhoto1,
+        stagePhoto2,
+        publicStagePhoto1: data.publicStagePhoto1 || '',
+        publicStagePhoto2: data.publicStagePhoto2 || '',
+        publicPhotoUrls: Array.isArray(data.publicPhotoUrls) ? data.publicPhotoUrls : [],
+        playerService: Boolean(data.playerService),
+        joins: Array.isArray(data.joins) ? data.joins : [],
+        contestPriceSum: data.contestPriceSum || 0,
+        contestPriceTotal: data.contestPriceTotal || 0,
+        isPriceCheck: Boolean(data.isPriceCheck),
+        isCanceled: Boolean(data.isCanceled),
+        invoiceEdited: Boolean(data.invoiceEdited),
+        createBy: data.createBy || '',
+        invoiceCreateAt: data.invoiceCreateAt || '',
+        submittedAt: data.submittedAt || '',
+        contestId: data.contestId || ''
+      });
+    });
+
+    return list;
+  },
+
   // 2. 입금 확인 여부 수정 (D1 + Firestore 동시 업데이트)
   async updatePaymentStatus(id: string, isPriceCheck: boolean): Promise<void> {
     // [A] D1 업데이트
@@ -163,6 +238,7 @@ export const contestService = {
       invoiceEditAt: string;
       playerPhotoUrlsJson?: string;
       selectedPhotoUrlsJson?: string;
+      publicPhotoUrlsJson?: string;
     } = { 
       ...registration,
       playerPhotoUrl: mainPhotoUrl,
@@ -171,6 +247,9 @@ export const contestService = {
       selectedPhotoUrls,
       stagePhoto1,
       stagePhoto2,
+      publicStagePhoto1: registration.publicStagePhoto1 || '',
+      publicStagePhoto2: registration.publicStagePhoto2 || '',
+      publicPhotoUrls: registration.publicPhotoUrls || [],
       invoiceEdited: true,
       invoiceEditAt: new Date().toISOString()
     };
@@ -180,22 +259,34 @@ export const contestService = {
     if (selectedPhotoUrls && selectedPhotoUrls.length > 0) {
       finalFirestorePayload.selectedPhotoUrlsJson = JSON.stringify(selectedPhotoUrls);
     }
+    if (registration.publicPhotoUrls && registration.publicPhotoUrls.length > 0) {
+      finalFirestorePayload.publicPhotoUrlsJson = JSON.stringify(registration.publicPhotoUrls);
+    }
     
-    const docRef = doc(db, 'invoices_pool', registration.id);
-    await setDoc(docRef, finalFirestorePayload);
+    const docId = (registration.id || registration.playerUid || (registration as any).docId || (registration as any).invoiceId || '').trim();
+    if (!docId) {
+      console.error('❌ 유효하지 않은 선수 문서 ID:', registration);
+      throw new Error(`선수 문서 ID가 유효하지 않습니다. (선수명: ${registration.playerName || '이름없음'})`);
+    }
+
+    finalFirestorePayload.id = docId;
+    finalFirestorePayload.playerUid = registration.playerUid || docId;
+
+    const docRef = doc(db, 'invoices_pool', docId);
+    await setDoc(docRef, finalFirestorePayload, { merge: true });
 
     // [B] D1 동기화 (기존의 /api/register 또는 PUT API 활용)
-    const res = await fetch(`${API_BASE_URL}/register`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      credentials: 'include',
-      body: JSON.stringify(finalFirestorePayload)
-    });
-
-    if (!res.ok) {
-      throw await handleResponseError(res);
+    try {
+      await fetch(`${API_BASE_URL}/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify(finalFirestorePayload)
+      });
+    } catch (d1Err) {
+      console.warn('D1 동기화 경고 (Firestore는 정상 저장됨):', d1Err);
     }
   },
 
@@ -337,5 +428,23 @@ export const contestService = {
 
     const result = await res.json();
     return result;
+  },
+
+  // 선수 출전 종목별 성적/순위 업데이트
+  async updatePlayerJoinResults(
+    invoiceId: string, 
+    joins: JoinItem[], 
+    overallAward?: string
+  ): Promise<void> {
+    const docRef = doc(db, 'invoices_pool', invoiceId);
+    const payload: any = { joins };
+    if (overallAward !== undefined) {
+      payload.award = overallAward;
+      if (overallAward.includes('그랑프리') || overallAward.includes('우승')) {
+        payload.isGrandPrix = true;
+        payload.rank = 1;
+      }
+    }
+    await updateDoc(docRef, payload);
   }
 };

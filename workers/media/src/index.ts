@@ -322,4 +322,37 @@ app.get('/api/photos/*', async (c) => {
   }
 });
 
+// 3. R2 이미지 파일 실제 삭제 API (URL 또는 키 기반)
+app.post('/api/delete-photo', async (c) => {
+  try {
+    const { url, key } = await c.req.json();
+    let targetKey = key;
+    if (!targetKey && url) {
+      const match = url.match(/\/api\/photos\/(.+)$/);
+      if (match) {
+        targetKey = decodeURIComponent(match[1]);
+      }
+    }
+    if (targetKey) {
+      await c.env.R2.delete(targetKey);
+      return c.json({ success: true, message: `R2 파일 삭제 완료: ${targetKey}` });
+    }
+    return c.json({ error: '유효한 파일 키 또는 URL이 아닙니다.' }, 400);
+  } catch (err: any) {
+    console.error('R2 파일 삭제 실패:', err);
+    return c.json({ error: 'R2 파일 삭제 실패: ' + err.message }, 500);
+  }
+});
+
+app.delete('/api/photos/*', async (c) => {
+  try {
+    const key = decodeURIComponent(c.req.path.replace('/api/photos/', ''));
+    if (!key) return c.json({ error: '삭제할 파일 키가 없습니다.' }, 400);
+    await c.env.R2.delete(key);
+    return c.json({ success: true, message: `R2 파일 삭제 완료: ${key}` });
+  } catch (err: any) {
+    return c.json({ error: 'R2 파일 삭제 실패: ' + err.message }, 500);
+  }
+});
+
 export default app;

@@ -11,6 +11,10 @@ import MediaManagerPage from './pages/MediaManagerPage';
 import SystemSettingsPage from './pages/SystemSettingsPage';
 import NoticeManagerPage from './pages/NoticeManagerPage';
 import ContestStaffManagerPage from './pages/ContestStaffManagerPage';
+import ContestResultsManagerPage from './pages/ContestResultsManagerPage';
+import SponsorManagerPage from './pages/SponsorManagerPage';
+import SponsorReportPage from './pages/SponsorReportPage';
+import PreRegistrationManagerPage from './pages/PreRegistrationManagerPage';
 
 // 인증 보호용 라우트 가드 컴포넌트
 function ProtectedRoute() {
@@ -54,9 +58,12 @@ export default function App() {
         {/* 보호된 관리자 라우트 */}
         <Route element={<ProtectedRoute />}>
           <Route path="/" element={<Layout />}>
-            {/* 기본 주소로 진입 시 히어로 선수 목록으로 리다이렉트 */}
-            <Route index element={<Navigate to="/hero" replace />} />
+            {/* 기본 주소로 진입 시 대회 성적 관리로 리다이렉트 */}
+            <Route index element={<Navigate to="/contest-results" replace />} />
             
+            {/* 대회 성적 및 결과 관리 */}
+            <Route path="contest-results" element={<ContestResultsManagerPage />} />
+
             {/* 히어로 선수 관리 페이지 구조 */}
             <Route path="hero" element={<HeroPlayerList />} />
             <Route path="hero/new" element={<HeroPlayerCreate />} />
@@ -73,6 +80,13 @@ export default function App() {
 
             {/* 필수 공지사항 관리 */}
             <Route path="notices" element={<NoticeManagerPage />} />
+
+            {/* 스폰서 & 공식 파트너 관리 */}
+            <Route path="sponsors" element={<SponsorManagerPage />} />
+            <Route path="sponsor-reports" element={<SponsorReportPage />} />
+
+            {/* 2027 제10회 사전 접수자 관리 */}
+            <Route path="pre-registrations" element={<PreRegistrationManagerPage />} />
 
             {/* 대회 관계자 계정 관리 */}
             <Route path="contest-staffs" element={<ContestStaffManagerPage />} />

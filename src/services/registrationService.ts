@@ -158,6 +158,24 @@ export async function getUserInvoices(playerUid: string): Promise<RegistrationPa
           console.error('Failed to parse playerPhotoUrlsJson:', e);
         }
       }
+      if (data.selectedPhotoUrlsJson) {
+        try {
+          data.selectedPhotoUrls = JSON.parse(data.selectedPhotoUrlsJson);
+        } catch (e) {
+          console.error('Failed to parse selectedPhotoUrlsJson:', e);
+        }
+      }
+      if (typeof data.selectedPhotoUrls === 'string') {
+        try {
+          data.selectedPhotoUrls = JSON.parse(data.selectedPhotoUrls);
+        } catch (e) {}
+      }
+      if (!data.stagePhoto1 && Array.isArray(data.selectedPhotoUrls) && data.selectedPhotoUrls[0]) {
+        data.stagePhoto1 = data.selectedPhotoUrls[0];
+      }
+      if (!data.stagePhoto2 && Array.isArray(data.selectedPhotoUrls) && data.selectedPhotoUrls[1]) {
+        data.stagePhoto2 = data.selectedPhotoUrls[1];
+      }
       list.push({ id: doc.id, ...data } as RegistrationPayload);
     });
     // 최신 신청서가 위로 오도록 정렬
@@ -287,3 +305,307 @@ export async function updateHybridRegistration(
     d1Error,
   };
 }
+
+// 6-1. 대회 메타데이터 실시간 보강 헬퍼 (대회일자, 대회장소, 대회명 동기화)
+async function enrichInvoiceWithContestData(invoice: RegistrationPayload): Promise<RegistrationPayload> {
+  const result = { ...invoice };
+
+  // 만약 contestDate 또는 contestLocation이 이미 채워져 있다면 그대로 사용
+  if (result.contestDate && result.contestLocation) {
+    return result;
+  }
+
+  // contestId 또는 contestNoticeId로 Firestore contest_notice 조회
+  const targetContestId = result.contestId;
+  if (targetContestId) {
+    try {
+      // 1) contest_notice 컬렉션에서 contestId 또는 문서 ID로 조회
+      const noticeDocRef = doc(db, 'contest_notice', targetContestId);
+      const noticeSnap = await getDoc(noticeDocRef);
+      if (noticeSnap.exists()) {
+        const nd = noticeSnap.data();
+        if (!result.contestTitle && nd.contestTitle) result.contestTitle = nd.contestTitle;
+        if (!result.contestDate && nd.contestDate) result.contestDate = nd.contestDate;
+        if (!result.contestLocation && nd.contestLocation) result.contestLocation = nd.contestLocation;
+      } else {
+        // 쿼리로 contestId 일치 조회
+        const qNotice = query(collection(db, 'contest_notice'), where('contestId', '==', targetContestId));
+        const snapNotice = await getDocs(qNotice);
+        if (!snapNotice.empty) {
+          const nd = snapNotice.docs[0].data();
+          if (!result.contestTitle && nd.contestTitle) result.contestTitle = nd.contestTitle;
+          if (!result.contestDate && nd.contestDate) result.contestDate = nd.contestDate;
+          if (!result.contestLocation && nd.contestLocation) result.contestLocation = nd.contestLocation;
+        }
+      }
+    } catch (e) {
+      console.warn('대회 메타데이터 보강 조회 오류:', e);
+    }
+  }
+
+  // 최후 Fallback: 제9회 용인특례시 공식 대회 기본값 적용
+  if (!result.contestDate) {
+    result.contestDate = '2026-08-29';
+  }
+  if (!result.contestLocation) {
+    result.contestLocation = '용인시청 에이스홀';
+  }
+
+  return result;
+}
+
+// 7. 단일 선수 쇼케이스 인보이스 조회 (D1 우선 조회 & Firestore fallback 지원)
+export async function getInvoiceByIdOrPlayerUid(idOrUid: string): Promise<RegistrationPayload | null> {
+  if (!idOrUid) return null;
+
+  // 0) Cloudflare D1 공식 인보이스 및 공식 심사 결과 조회 우선 (실시간 성적 & 사진)
+  try {
+    const res = await fetch(`https://ybbf-api-worker.jbkim.workers.dev/api/invoices/showcase/${encodeURIComponent(idOrUid)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && json.invoice) {
+        return json.invoice as RegistrationPayload;
+      }
+    }
+  } catch (err) {
+    // continue to Firestore fallback
+  }
+
+  // 1) invoices_pool 직접 문서 ID로 조회
+  try {
+    const docRef = doc(db, 'invoices_pool', idOrUid);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      let photoUrls = data.playerPhotoUrls || [];
+      if ((!photoUrls || photoUrls.length === 0) && data.playerPhotoUrlsJson) {
+        try {
+          photoUrls = JSON.parse(data.playerPhotoUrlsJson);
+        } catch (e) {}
+      }
+      const rawPayload = { id: docSnap.id, ...data, playerPhotoUrls: photoUrls } as RegistrationPayload;
+      return await enrichInvoiceWithContestData(rawPayload);
+    }
+  } catch (err) {
+    // continue
+  }
+
+  // 2) invoices 컬렉션 직접 문서 ID로 조회
+  try {
+    const docRef = doc(db, 'invoices', idOrUid);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      let photoUrls = data.playerPhotoUrls || [];
+      if ((!photoUrls || photoUrls.length === 0) && data.playerPhotoUrlsJson) {
+        try {
+          photoUrls = JSON.parse(data.playerPhotoUrlsJson);
+        } catch (e) {}
+      }
+      const rawPayload = { id: docSnap.id, ...data, playerPhotoUrls: photoUrls } as RegistrationPayload;
+      return await enrichInvoiceWithContestData(rawPayload);
+    }
+  } catch (err) {
+    // continue
+  }
+
+  // 3) playerUid 쿼리 조회 (invoices_pool)
+  try {
+    const q1 = query(collection(db, 'invoices_pool'), where('playerUid', '==', idOrUid));
+    const snap1 = await getDocs(q1);
+    if (!snap1.empty) {
+      const docItem = snap1.docs[0];
+      const data = docItem.data();
+      let photoUrls = data.playerPhotoUrls || [];
+      if ((!photoUrls || photoUrls.length === 0) && data.playerPhotoUrlsJson) {
+        try {
+          photoUrls = JSON.parse(data.playerPhotoUrlsJson);
+        } catch (e) {}
+      }
+      const rawPayload = { id: docItem.id, ...data, playerPhotoUrls: photoUrls } as RegistrationPayload;
+      return await enrichInvoiceWithContestData(rawPayload);
+    }
+  } catch (err) {
+    // continue
+  }
+
+  // 4) createBy 쿼리 조회
+  try {
+    const q2 = query(collection(db, 'invoices_pool'), where('createBy', '==', idOrUid));
+    const snap2 = await getDocs(q2);
+    if (!snap2.empty) {
+      const docItem = snap2.docs[0];
+      const data = docItem.data();
+      let photoUrls = data.playerPhotoUrls || [];
+      if ((!photoUrls || photoUrls.length === 0) && data.playerPhotoUrlsJson) {
+        try {
+          photoUrls = JSON.parse(data.playerPhotoUrlsJson);
+        } catch (e) {}
+      }
+      const rawPayload = { id: docItem.id, ...data, playerPhotoUrls: photoUrls } as RegistrationPayload;
+      return await enrichInvoiceWithContestData(rawPayload);
+    }
+  } catch (err) {
+    // continue
+  }
+
+  // 5) playerName 쿼리 조회 (선수 이름으로도 쇼케이스 열기 지원)
+  try {
+    const cleanName = decodeURIComponent(idOrUid).trim().replace(/^(champ-|legend-|youth-\d+-|youth-)/, '');
+    const q3 = query(collection(db, 'invoices_pool'), where('playerName', '==', cleanName));
+    const snap3 = await getDocs(q3);
+    if (!snap3.empty) {
+      const docItem = snap3.docs[0];
+      const data = docItem.data();
+      let photoUrls = data.playerPhotoUrls || [];
+      if ((!photoUrls || photoUrls.length === 0) && data.playerPhotoUrlsJson) {
+        try {
+          photoUrls = JSON.parse(data.playerPhotoUrlsJson);
+        } catch (e) {}
+      }
+      const rawPayload = { id: docItem.id, ...data, playerPhotoUrls: photoUrls } as RegistrationPayload;
+      return await enrichInvoiceWithContestData(rawPayload);
+    }
+  } catch (err) {
+    // continue
+  }
+
+  return null;
+}
+
+// 8. 쇼케이스 SNS 인터랙션 (Reactions & Comments)
+export type ShowcaseReactionType = 'heart' | 'fire' | 'clap' | 'trophy';
+
+export interface ShowcaseReactions {
+  heart: number;
+  fire: number;
+  clap: number;
+  trophy: number;
+}
+
+export interface ShowcaseComment {
+  id: string;
+  invoiceId: string;
+  authorName: string;
+  authorGym?: string;
+  content: string;
+  badge?: string;
+  createdAt: string;
+  likeCount?: number;
+}
+
+// 8-1. 쇼케이스 리액션 인터랙션 (하트, 불꽃, 박수, 트로피)
+export async function reactShowcase(
+  invoiceId: string, 
+  reaction: ShowcaseReactionType
+): Promise<ShowcaseReactions> {
+  const localKey = `ybbf_reactions_${invoiceId}`;
+  let currentReactions: ShowcaseReactions = { heart: 12, fire: 8, clap: 15, trophy: 5 };
+  try {
+    const saved = localStorage.getItem(localKey);
+    if (saved) currentReactions = JSON.parse(saved);
+  } catch {}
+
+  currentReactions[reaction] = (currentReactions[reaction] || 0) + 1;
+  localStorage.setItem(localKey, JSON.stringify(currentReactions));
+
+  try {
+    const docRef = doc(db, 'invoices_pool', invoiceId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      const firestoreReactions = data.reactions || { heart: data.cheerCount || 12, fire: 8, clap: 15, trophy: 5 };
+      firestoreReactions[reaction] = (firestoreReactions[reaction] || 0) + 1;
+      await setDoc(docRef, { reactions: firestoreReactions, cheerCount: firestoreReactions.heart }, { merge: true });
+      return firestoreReactions;
+    }
+  } catch (e) {
+    console.warn('Firestore reaction update error:', e);
+  }
+
+  return currentReactions;
+}
+
+// 8-2. 쇼케이스 리액션 초기값 조회
+export async function getShowcaseReactions(invoiceId: string): Promise<ShowcaseReactions> {
+  try {
+    const docRef = doc(db, 'invoices_pool', invoiceId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (data.reactions) return data.reactions;
+      if (data.cheerCount) return { heart: data.cheerCount, fire: 8, clap: 15, trophy: 5 };
+    }
+  } catch {}
+
+  const localKey = `ybbf_reactions_${invoiceId}`;
+  try {
+    const saved = localStorage.getItem(localKey);
+    if (saved) return JSON.parse(saved);
+  } catch {}
+
+  return { heart: 18, fire: 12, clap: 24, trophy: 7 };
+}
+
+// 8-3. 쇼케이스 댓글 목록 조회
+export async function getShowcaseComments(invoiceId: string): Promise<ShowcaseComment[]> {
+  const localKey = `ybbf_comments_${invoiceId}`;
+  let localComments: ShowcaseComment[] = [];
+  try {
+    const saved = localStorage.getItem(localKey);
+    if (saved) localComments = JSON.parse(saved);
+  } catch {}
+
+  try {
+    const commentsRef = collection(db, 'invoices_pool', invoiceId, 'comments');
+    const snap = await getDocs(commentsRef);
+    if (!snap.empty) {
+      const fetched = snap.docs.map(d => ({ id: d.id, ...d.data() } as ShowcaseComment));
+      fetched.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return fetched;
+    }
+  } catch (e) {
+    console.warn('Firestore comments fetch error (using local):', e);
+  }
+
+  return localComments;
+}
+
+// 8-4. 쇼케이스 댓글 등록
+export async function addShowcaseComment(
+  invoiceId: string,
+  comment: Omit<ShowcaseComment, 'id' | 'createdAt'>
+): Promise<ShowcaseComment> {
+  const newComment: ShowcaseComment = {
+    id: `cmt_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+    invoiceId,
+    ...comment,
+    createdAt: new Date().toISOString(),
+    likeCount: 0,
+  };
+
+  // 1. LocalStorage 저장
+  const localKey = `ybbf_comments_${invoiceId}`;
+  try {
+    const existing: ShowcaseComment[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+    existing.unshift(newComment);
+    localStorage.setItem(localKey, JSON.stringify(existing));
+  } catch {}
+
+  // 2. Firestore 저장
+  try {
+    const commentDocRef = doc(db, 'invoices_pool', invoiceId, 'comments', newComment.id);
+    await setDoc(commentDocRef, newComment);
+  } catch (e) {
+    console.warn('Firestore add comment error:', e);
+  }
+
+  return newComment;
+}
+
+// 8-5. 레거시 호환 cheerShowcase
+export async function cheerShowcase(invoiceId: string): Promise<number> {
+  const res = await reactShowcase(invoiceId, 'heart');
+  return res.heart;
+}
+

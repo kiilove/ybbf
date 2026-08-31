@@ -7,6 +7,8 @@ import DashboardPage from './pages/dashboard/DashboardPage';
 import RegistrationListPage from './pages/registrations/RegistrationListPage';
 import PreMeasurementListPage from './pages/pre_measurements/PreMeasurementListPage';
 import PhotoManagementPage from './pages/photos/PhotoManagementPage';
+import PhotoBrandingStudioPage from './pages/photos/PhotoBrandingStudioPage';
+import PreRegistrationListPage from './pages/pre_registrations/PreRegistrationListPage';
 import MyPage from './pages/mypage/MyPage';
 
 // Protected Route Guard Component
@@ -52,10 +54,14 @@ export default function App() {
 
         {/* Protected admin/staff routes */}
         <Route element={<ProtectedRoute />}>
+          {/* Fullscreen Studio Page (No Layout Header/Sidebar) */}
+          <Route path="photos/studio" element={<PhotoBrandingStudioPage />} />
+
           <Route element={<Layout />}>
             {/* Redirect root to dashboard */}
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="pre-registrations" element={<PreRegistrationListPage />} />
             <Route path="registrations" element={<RegistrationListPage />} />
             <Route path="photos" element={<PhotoManagementPage />} />
             <Route path="pre-measurements" element={<PreMeasurementListPage />} />

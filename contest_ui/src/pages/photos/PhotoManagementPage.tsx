@@ -1,16 +1,19 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useContest } from '../../hooks/useContest';
 import { authService } from '../../services/authService';
+import { contestService } from '../../services/contestService';
 import type { Registration } from '../../services/contestService';
 import type { SimpleContest } from '../../services/authService';
 import { 
   Camera, Upload, Download, CheckCircle2, AlertCircle, 
   Search, ChevronDown, ChevronRight, X, Trash2, Eye, RefreshCw,
-  Plus
+  Plus, ExternalLink, Trophy, Sparkles
 } from 'lucide-react';
 import ConfirmModal from '../../components/common/ConfirmModal';
 import { uploadToR2 } from '../../services/uploadToR2Service';
+import { batchProcessAllStagePhotos, resetAllPublicStagePhotos } from '../../services/batchWatermarkService';
 
 interface CategoryGroup {
   categoryTitle: string;
@@ -21,6 +24,7 @@ interface CategoryGroup {
 }
 
 export default function PhotoManagementPage() {
+  const navigate = useNavigate();
   const { staff } = useAuth();
   const { registrations, isLoading, filters, fetchList, setFilter, updatePlayerPhotos } = useContest();
   const [contests, setContests] = useState<SimpleContest[]>([]);
@@ -30,7 +34,7 @@ export default function PhotoManagementPage() {
   const [photoFilter, setPhotoFilter] = useState<'all' | 'uploaded' | 'missing'>('all');
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [expandedGrades, setExpandedGrades] = useState<Record<string, boolean>>({});
-  
+
   // Lightbox Modal State
   const [lightboxPhoto, setLightboxPhoto] = useState<{
     registration: Registration;
@@ -57,6 +61,176 @@ export default function PhotoManagementPage() {
     onConfirm: () => {},
   });
 
+  // Batch Branding State
+  const [batchState, setBatchState] = useState<{
+    isOpen: boolean;
+    isRunning: boolean;
+    totalContestPlayers: number;
+    validPhotoPlayersCount: number;
+    skippedNoPhotoCount: number;
+    total: number;
+    current: number;
+    percent: number;
+    currentPlayerName: string;
+    status: 'idle' | 'running' | 'done' | 'error';
+    successCount: number;
+    failCount: number;
+    totalPhotosProcessed: number;
+  }>({
+    isOpen: false,
+    isRunning: false,
+    totalContestPlayers: 0,
+    validPhotoPlayersCount: 0,
+    skippedNoPhotoCount: 0,
+    total: 0,
+    current: 0,
+    percent: 0,
+    currentPlayerName: '',
+    status: 'idle',
+    successCount: 0,
+    failCount: 0,
+    totalPhotosProcessed: 0,
+  });
+
+  // 전체 선수 일괄 자동 브랜딩 실행 (9회 대회 또는 현재 선택된 대회 기준)
+  const handleRunBatchBranding = async () => {
+    const targetContestId = filters.contestId || staff?.contestId || '';
+
+    setBatchState({
+      isOpen: true,
+      isRunning: true,
+      totalContestPlayers: registrations.length,
+      validPhotoPlayersCount: 0,
+      skippedNoPhotoCount: 0,
+      total: 0,
+      current: 0,
+      percent: 0,
+      currentPlayerName: '대회 선수 데이터 및 사진 검증 중...',
+      status: 'running',
+      successCount: 0,
+      failCount: 0,
+      totalPhotosProcessed: 0,
+    });
+
+    try {
+      const result = await batchProcessAllStagePhotos(
+        registrations,
+        targetContestId,
+        {
+          preset: 'official_stamp',
+          subText: '용인시보디빌딩협회',
+          text: 'ybbf.org'
+        },
+        (progress) => {
+          setBatchState(prev => ({
+            ...prev,
+            total: progress.total,
+            current: progress.current,
+            percent: progress.percent,
+            currentPlayerName: progress.currentPlayerName,
+            totalPhotosProcessed: progress.processedSlots
+          }));
+        }
+      );
+
+      setBatchState(prev => ({
+        ...prev,
+        isRunning: false,
+        status: 'done',
+        totalContestPlayers: result.totalContestPlayers,
+        validPhotoPlayersCount: result.validPhotoPlayersCount,
+        skippedNoPhotoCount: result.skippedNoPhotoCount,
+        successCount: result.successPlayerCount,
+        failCount: result.failPlayerCount,
+        totalPhotosProcessed: result.totalPhotosProcessed,
+      }));
+
+      fetchList();
+    } catch (err: any) {
+      alert('일괄 브랜딩 실행 중 오류: ' + (err.message || '알 수 없는 오류'));
+      setBatchState(prev => ({ ...prev, isRunning: false, status: 'error' }));
+    }
+  };
+
+  // 9회 대회 가공된 공개용 사진 전체 초기화
+  const handleResetAllPublicPhotos = () => {
+    const targetContestId = filters.contestId || staff?.contestId || '';
+    setConfirmConfig({
+      isOpen: true,
+      title: '공개용 무대 사진 전체 초기화',
+      message: '9회 대회의 가공된 공개용 사진(publicStagePhoto1, 2)을 모두 비우고 초기화하시겠습니까?\n\n⚠️ 선수의 원본 사진은 100% 안전하게 유지됩니다.',
+      confirmText: '초기화 실행',
+      cancelText: '취소',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          const resetCount = await resetAllPublicStagePhotos(registrations, targetContestId);
+          alert(`총 ${resetCount}명의 공개용 사진 슬롯이 초기화되었습니다.`);
+          fetchList();
+        } catch (err: any) {
+          alert('초기화 실패: ' + err.message);
+        }
+      }
+    });
+  };
+
+  // 🏆 개별 선수 출전 종목 성적 및 순위 변경
+  const handleUpdateJoinRank = async (regId: string, joinIdx: number, awardValue: string) => {
+    const reg = registrations.find(r => r.id === regId);
+    if (!reg) return;
+
+    const newJoins = [...(reg.joins || [])];
+    if (!newJoins[joinIdx]) return;
+
+    let rankNum: number | undefined = undefined;
+    let isGp = false;
+
+    if (awardValue === '기본') {
+      newJoins[joinIdx] = {
+        ...newJoins[joinIdx],
+        rank: undefined,
+        award: undefined,
+        isGrandPrix: false
+      };
+    } else {
+      if (awardValue.includes('1위') || awardValue.includes('체급 우승')) rankNum = 1;
+      if (awardValue.includes('2위')) rankNum = 2;
+      if (awardValue.includes('3위')) rankNum = 3;
+      if (awardValue.includes('TOP 5')) rankNum = 4;
+      if (awardValue.includes('그랑프리')) {
+        rankNum = 1;
+        isGp = true;
+      }
+
+      newJoins[joinIdx] = {
+        ...newJoins[joinIdx],
+        rank: rankNum,
+        award: awardValue,
+        isGrandPrix: isGp
+      };
+    }
+
+    try {
+      await contestService.updatePlayerJoinResults(regId, newJoins, isGp ? '그랑프리 우승 (OVERALL CHAMPION)' : undefined);
+      fetchList();
+    } catch (err: any) {
+      alert('성적 저장 오류: ' + (err.message || err));
+    }
+  };
+
+  // 🏆 대회 공식 성적 일괄 동기화 알림/실행
+  const handleSyncContestAwards = async () => {
+    if (!window.confirm('대회 채점 심사 데이터에서 순위(체급 우승, 그랑프리, 입상)를 가져와 모든 선수 쇼케이스와 마이페이지에 실시간 반영하시겠습니까?')) {
+      return;
+    }
+    try {
+      await fetchList();
+      alert('✨ 대회 성적 및 순위가 쇼케이스와 마이페이지에 실시간 동기화되었습니다!');
+    } catch (err: any) {
+      alert('동기화 실패: ' + err.message);
+    }
+  };
+
   // Load contest list if staff has no fixed contestId
   useEffect(() => {
     async function loadContests() {
@@ -75,9 +249,8 @@ export default function PhotoManagementPage() {
   useEffect(() => {
     if (staff?.contestId) {
       setFilter('contestId', staff.contestId);
-    } else if (filters.contestId) {
-      fetchList();
     }
+    fetchList();
   }, [staff, filters.contestId, setFilter, fetchList]);
 
   // Group Registrations by Category -> Grade -> Player
@@ -378,26 +551,102 @@ export default function PhotoManagementPage() {
           </p>
         </div>
 
-        <button 
-          onClick={() => fetchList()} 
-          disabled={isLoading}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '10px 16px',
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            border: '1px solid var(--color-divider)',
-            borderRadius: '8px',
-            color: '#e5e7eb',
-            fontSize: '13px',
-            fontWeight: 500,
-            cursor: 'pointer'
-          }}
-        >
-          <RefreshCw size={16} className={isLoading ? 'spin-animation' : ''} />
-          목록 새로고침
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* 대회 성적 실시간 동기화 버튼 */}
+          <button
+            onClick={handleSyncContestAwards}
+            disabled={isLoading}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '10px 16px',
+              backgroundColor: 'rgba(234, 179, 8, 0.15)',
+              border: '1px solid rgba(234, 179, 8, 0.4)',
+              borderRadius: '10px',
+              color: '#facc15',
+              fontSize: '13px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(234, 179, 8, 0.15)',
+              transition: 'all 0.2s ease'
+            }}
+            title="대회 심사 결과의 순위/성적을 모든 선수 쇼케이스와 마이페이지에 실시간 동기화합니다"
+          >
+            <Trophy size={16} />
+            대회 성적 및 순위 동기화
+          </button>
+
+          {/* 전체 선수 일괄 자동 브랜딩 버튼 */}
+          <button
+            onClick={handleRunBatchBranding}
+            disabled={isLoading || batchState.isRunning}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 18px',
+              backgroundColor: 'rgba(210, 255, 0, 0.15)',
+              border: '1px solid rgba(210, 255, 0, 0.4)',
+              borderRadius: '10px',
+              color: '#d2ff00',
+              fontSize: '13px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(210, 255, 0, 0.15)',
+              transition: 'all 0.2s ease'
+            }}
+            title="모든 선수의 무대 1번과 2번 사진을 일괄 자동 가공하여 공개용으로 저장합니다"
+          >
+            <Sparkles size={16} />
+            ⚡️ 전체 선수 무대 사진 일괄 자동 브랜딩
+          </button>
+
+          {/* 공개용 가공 사진 일괄 초기화 버튼 */}
+          <button
+            onClick={handleResetAllPublicPhotos}
+            disabled={isLoading || batchState.isRunning}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '10px 14px',
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: '10px',
+              color: '#fca5a5',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s ease'
+            }}
+            title="가공된 공개용 무대 사진만 초기화합니다 (원본 사진은 안전하게 보존됩니다)"
+          >
+            <Trash2 size={15} />
+            🧹 가공본 초기화
+          </button>
+
+          <button 
+            onClick={() => fetchList()} 
+            disabled={isLoading || batchState.isRunning}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '10px 16px',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid var(--color-divider)',
+              borderRadius: '8px',
+              color: '#e5e7eb',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer'
+            }}
+          >
+            <RefreshCw size={16} className={isLoading ? 'spin-animation' : ''} />
+            목록 새로고침
+          </button>
+        </div>
       </div>
 
       {/* Contest Selector Bar (for multi-contest staff) */}
@@ -625,7 +874,7 @@ export default function PhotoManagementPage() {
 
                           {/* 3 Level: Player Cards Grid */}
                           {isGradeExpanded && (
-                            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '16px' }}>
+                            <div style={{ padding: '16px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: '18px' }}>
                               {gradeGroup.players.map((reg) => {
                                 const allPhotos: string[] = [];
                                 const sourcePhotos = reg.photos || reg.playerPhotoUrls || [];
@@ -646,60 +895,107 @@ export default function PhotoManagementPage() {
                                     key={reg.id}
                                     style={{
                                       backgroundColor: '#1e293b',
-                                      borderRadius: '12px',
+                                      borderRadius: '14px',
                                       border: `1px solid ${hasPhotos ? 'rgba(255, 255, 255, 0.08)' : 'rgba(239, 68, 68, 0.4)'}`,
-                                      padding: '18px',
+                                      padding: '20px',
                                       display: 'flex',
                                       flexDirection: 'column',
                                       justifyContent: 'space-between',
-                                      gap: '14px',
-                                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                      gap: '16px',
+                                      boxShadow: '0 6px 12px -2px rgba(0, 0, 0, 0.25)'
                                     }}
                                   >
                                     {/* Player Info Line */}
                                     <div>
                                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
                                         <div>
-                                          <span style={{ fontSize: '17px', fontWeight: 700, color: '#f8fafc', marginRight: '8px' }}>
+                                          <span style={{ fontSize: '18px', fontWeight: 800, color: '#f8fafc', marginRight: '8px' }}>
                                             {reg.playerName}
                                           </span>
-                                          <span style={{ fontSize: '12px', color: '#94a3b8' }}>
+                                          <span style={{ fontSize: '13px', color: '#94a3b8' }}>
                                             ({reg.playerGender === 'm' ? '남' : '여'}, {reg.playerBirth})
                                           </span>
                                         </div>
 
-                                        {/* Photo Status Badge */}
-                                        {hasPhotos ? (
-                                          <span style={{
-                                            fontSize: '11px',
-                                            fontWeight: 700,
-                                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
-                                            color: '#34d399',
-                                            border: '1px solid rgba(16, 185, 129, 0.4)',
-                                            padding: '3px 8px',
-                                            borderRadius: '6px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '4px'
-                                          }}>
-                                            <CheckCircle2 size={12} /> 사진 {allPhotos.length}장
-                                          </span>
-                                        ) : (
-                                          <span style={{
-                                            fontSize: '11px',
-                                            fontWeight: 700,
-                                            backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                                            color: '#f87171',
-                                            border: '1px solid rgba(239, 68, 68, 0.4)',
-                                            padding: '3px 8px',
-                                            borderRadius: '6px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '4px'
-                                          }}>
-                                            <AlertCircle size={12} /> 사진 누락
-                                          </span>
-                                        )}
+                                        {/* Photo Status & MyPage Preview Links */}
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                          <a
+                                            href={`http://localhost:4100/showcase/${encodeURIComponent(reg.id || reg.playerUid || '')}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{
+                                              fontSize: '11px',
+                                              fontWeight: 700,
+                                              backgroundColor: 'rgba(210, 255, 0, 0.12)',
+                                              color: '#d2ff00',
+                                              border: '1px solid rgba(210, 255, 0, 0.35)',
+                                              padding: '4px 9px',
+                                              borderRadius: '6px',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              textDecoration: 'none',
+                                              transition: 'all 0.2s ease'
+                                            }}
+                                            title="선수 공개 무대 쇼케이스 페이지 새 창 열기"
+                                          >
+                                            <ExternalLink size={12} /> 공개 쇼케이스
+                                          </a>
+                                          <a
+                                            href={`http://localhost:4100/mypage?previewUid=${encodeURIComponent(reg.playerUid || reg.id)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{
+                                              fontSize: '11px',
+                                              fontWeight: 700,
+                                              backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                                              color: '#93c5fd',
+                                              border: '1px solid rgba(147, 197, 253, 0.3)',
+                                              padding: '4px 9px',
+                                              borderRadius: '6px',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px',
+                                              textDecoration: 'none',
+                                              transition: 'all 0.2s ease'
+                                            }}
+                                            title="선수 시점 마이페이지 새 창으로 검수"
+                                          >
+                                            <ExternalLink size={12} /> 마이페이지 뷰
+                                          </a>
+
+                                          {hasPhotos ? (
+                                            <span style={{
+                                              fontSize: '11px',
+                                              fontWeight: 700,
+                                              backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                                              color: '#34d399',
+                                              border: '1px solid rgba(16, 185, 129, 0.4)',
+                                              padding: '4px 9px',
+                                              borderRadius: '6px',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px'
+                                            }}>
+                                              <CheckCircle2 size={13} /> 사진 {allPhotos.length}장
+                                            </span>
+                                          ) : (
+                                            <span style={{
+                                              fontSize: '11px',
+                                              fontWeight: 700,
+                                              backgroundColor: 'rgba(239, 68, 68, 0.15)',
+                                              color: '#f87171',
+                                              border: '1px solid rgba(239, 68, 68, 0.4)',
+                                              padding: '4px 9px',
+                                              borderRadius: '6px',
+                                              display: 'flex',
+                                              alignItems: 'center',
+                                              gap: '4px'
+                                            }}>
+                                              <AlertCircle size={13} /> 사진 누락
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
 
                                       <div style={{ fontSize: '13px', color: '#94a3b8', display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '10px' }}>
@@ -707,39 +1003,107 @@ export default function PhotoManagementPage() {
                                         <div>소속: <span style={{ color: '#cbd5e1' }}>{reg.playerGym}</span></div>
                                       </div>
 
-                                      {/* Contest Photo Designation Status Pills */}
-                                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                      {/* Contest & Public Photo Designation Status Pills */}
+                                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                        {/* 대회 무대용 원본 슬롯 */}
                                         {slot1 ? (
                                           <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399', border: '1px solid rgba(16, 185, 129, 0.4)', padding: '3px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            🏆 대회용 1번 지정됨
+                                            🏆 무대 1번 지정됨
                                           </span>
                                         ) : (
                                           <span style={{ fontSize: '11px', fontWeight: 500, backgroundColor: 'rgba(255, 255, 255, 0.05)', color: '#94a3b8', border: '1px dashed rgba(255, 255, 255, 0.2)', padding: '3px 8px', borderRadius: '6px' }}>
-                                            대회용 1번 미지정
+                                            무대 1번 미지정
                                           </span>
                                         )}
 
                                         {slot2 ? (
                                           <span style={{ fontSize: '11px', fontWeight: 700, backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa', border: '1px solid rgba(59, 130, 246, 0.4)', padding: '3px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                            🥈 대회용 2번 지정됨
+                                            🥈 무대 2번 지정됨
                                           </span>
                                         ) : (
                                           <span style={{ fontSize: '11px', fontWeight: 500, backgroundColor: 'rgba(255, 255, 255, 0.05)', color: '#94a3b8', border: '1px dashed rgba(255, 255, 255, 0.2)', padding: '3px 8px', borderRadius: '6px' }}>
-                                            대회용 2번 미지정
+                                            무대 2번 미지정
                                           </span>
                                         )}
+
+                                        {/* 공개용 ybbf.org 브랜딩 슬롯 */}
+                                        {reg.publicStagePhoto1 ? (
+                                          <span style={{ fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(210, 255, 0, 0.15)', color: '#d2ff00', border: '1px solid rgba(210, 255, 0, 0.4)', padding: '3px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            🌐 공개용 1번 완료
+                                          </span>
+                                        ) : null}
+
+                                        {reg.publicStagePhoto2 ? (
+                                          <span style={{ fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(210, 255, 0, 0.15)', color: '#d2ff00', border: '1px solid rgba(210, 255, 0, 0.4)', padding: '3px 8px', borderRadius: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                            🌐 공개용 2번 완료
+                                          </span>
+                                        ) : null}
+                                      </div>
+
+                                      {/* 🏆 대회 공식 성적 & 입상 순위 관리 바 */}
+                                      <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                                        <div style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                          <Trophy size={13} color="#d2ff00" /> 출전 종목별 대회 성적 / 순위 부여:
+                                        </div>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                          {(reg.joins || []).map((join, joinIdx) => {
+                                            const currentAward = join.award || (join.rank ? `${join.rank}위` : '기본');
+                                            const isChamp = currentAward.includes('우승') || currentAward.includes('그랑프리');
+
+                                            return (
+                                              <div 
+                                                key={joinIdx} 
+                                                style={{ 
+                                                  display: 'flex', 
+                                                  alignItems: 'center', 
+                                                  justifyContent: 'space-between', 
+                                                  backgroundColor: '#0f172a', 
+                                                  padding: '6px 10px', 
+                                                  borderRadius: '8px', 
+                                                  border: isChamp ? '1px solid rgba(210, 255, 0, 0.35)' : '1px solid rgba(255, 255, 255, 0.06)' 
+                                                }}
+                                              >
+                                                <span style={{ fontSize: '12px', fontWeight: 600, color: '#e2e8f0' }}>
+                                                  {join.contestCategoryTitle} <span style={{ color: '#d2ff00', fontSize: '10px', fontWeight: 700 }}>({join.contestGradeTitle})</span>
+                                                </span>
+                                                <select
+                                                  value={currentAward}
+                                                  onChange={(e) => handleUpdateJoinRank(reg.id, joinIdx, e.target.value)}
+                                                  style={{
+                                                    backgroundColor: isChamp ? 'rgba(210, 255, 0, 0.15)' : '#1e293b',
+                                                    color: isChamp ? '#d2ff00' : '#f8fafc',
+                                                    border: isChamp ? '1px solid #d2ff00' : '1px solid rgba(255, 255, 255, 0.15)',
+                                                    borderRadius: '6px',
+                                                    padding: '3px 8px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 700,
+                                                    cursor: 'pointer',
+                                                    outline: 'none'
+                                                  }}
+                                                >
+                                                  <option value="기본">⚡ 본선 진출 (기본)</option>
+                                                  <option value="체급 우승 (1위)">🥇 1위 (체급 우승)</option>
+                                                  <option value="그랑프리 우승 (Grand Prix)">👑 그랑프리 우승 (Grand Prix)</option>
+                                                  <option value="2위 (준우승)">🥈 2위 (준우승)</option>
+                                                  <option value="3위 (입상)">🥉 3위 (입상)</option>
+                                                  <option value="TOP 5 (공식 입상)">🎖️ TOP 5 (공식 입상)</option>
+                                                </select>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
                                       </div>
                                     </div>
 
                                     {/* Photos List / Upload Section */}
                                     <div>
-                                      <div style={{ fontSize: '12px', fontWeight: 600, color: '#94a3b8', marginBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#cbd5e1', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span>등록된 사진 풀 ({allPhotos.length}장)</span>
-                                        <span style={{ fontSize: '11px', color: '#64748b' }}>[1번] [2번] 버튼으로 대회용 사진 지정</span>
+                                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>[1번] [2번] 버튼: 대회용 지정 • [🪄 브랜딩]: 워터마크 가공</span>
                                       </div>
 
                                       {hasPhotos ? (
-                                        <div style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '6px' }}>
+                                        <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '8px' }}>
                                           {allPhotos.map((url, pIdx) => {
                                             const isSlot1 = slot1 === url;
                                             const isSlot2 = slot2 === url;
@@ -749,13 +1113,14 @@ export default function PhotoManagementPage() {
                                                 key={pIdx}
                                                 style={{
                                                   position: 'relative',
-                                                  width: '94px',
-                                                  height: '118px',
-                                                  borderRadius: '8px',
+                                                  width: '150px',
+                                                  height: '195px',
+                                                  borderRadius: '10px',
                                                   overflow: 'hidden',
-                                                  border: `2px solid ${isSlot1 ? '#10b981' : (isSlot2 ? '#3b82f6' : 'rgba(255, 255, 255, 0.12)')}`,
+                                                  border: `2px solid ${isSlot1 ? '#10b981' : (isSlot2 ? '#3b82f6' : 'rgba(255, 255, 255, 0.15)')}`,
                                                   backgroundColor: '#000',
-                                                  flexShrink: 0
+                                                  flexShrink: 0,
+                                                  boxShadow: isSlot1 ? '0 0 12px rgba(16, 185, 129, 0.25)' : (isSlot2 ? '0 0 12px rgba(59, 130, 246, 0.25)' : 'none')
                                                 }}
                                               >
                                                 {/* Thumbnail Image */}
@@ -766,52 +1131,86 @@ export default function PhotoManagementPage() {
                                                   onClick={() => setLightboxPhoto({ registration: reg, photoIndex: pIdx, url })}
                                                 />
 
-                                                {/* Designation Badge */}
+                                                {/* Slot 1 Badge */}
                                                 {isSlot1 && (
                                                   <div style={{
                                                     position: 'absolute',
-                                                    top: '4px',
-                                                    left: '4px',
+                                                    top: '6px',
+                                                    left: '6px',
                                                     backgroundColor: '#10b981',
                                                     color: '#fff',
-                                                    fontSize: '10px',
-                                                    fontWeight: 800,
-                                                    padding: '2px 5px',
-                                                    borderRadius: '4px',
-                                                    boxShadow: '0 2px 4px rgba(0,0,0,0.6)'
+                                                    fontSize: '11px',
+                                                    fontWeight: 900,
+                                                    padding: '3px 7px',
+                                                    borderRadius: '5px',
+                                                    boxShadow: '0 2px 6px rgba(0,0,0,0.7)'
                                                   }}>
-                                                    🏆 1번
+                                                    🏆 1번 메인
                                                   </div>
                                                 )}
 
+                                                {/* Slot 2 Badge */}
                                                 {isSlot2 && (
                                                   <div style={{
                                                     position: 'absolute',
-                                                    top: '4px',
-                                                    left: '4px',
+                                                    top: '6px',
+                                                    left: '6px',
                                                     backgroundColor: '#3b82f6',
                                                     color: '#fff',
-                                                    fontSize: '10px',
-                                                    fontWeight: 800,
-                                                    padding: '2px 5px',
-                                                    borderRadius: '4px',
-                                                    boxShadow: '0 2px 4px rgba(0,0,0,0.6)'
+                                                    fontSize: '11px',
+                                                    fontWeight: 900,
+                                                    padding: '3px 7px',
+                                                    borderRadius: '5px',
+                                                    boxShadow: '0 2px 6px rgba(0,0,0,0.7)'
                                                   }}>
-                                                    🥈 2번
+                                                    🥈 2번 액션
                                                   </div>
                                                 )}
 
-                                                {/* Action Overlay Buttons */}
+                                                {/* Top Right: Magic Branding Studio Button (Prominent) */}
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    e.preventDefault();
+                                                    navigate(`/photos/studio?id=${encodeURIComponent(reg.id)}&url=${encodeURIComponent(url)}`);
+                                                  }}
+                                                  title="워터마크 지우기 & ybbf.org 브랜딩 스튜디오 전용 페이지로 이동"
+                                                  style={{
+                                                    position: 'absolute',
+                                                    top: '6px',
+                                                    right: '6px',
+                                                    backgroundColor: 'rgba(210, 255, 0, 0.92)',
+                                                    color: '#000',
+                                                    fontSize: '11px',
+                                                    fontWeight: 900,
+                                                    padding: '4px 8px',
+                                                    borderRadius: '6px',
+                                                    border: 'none',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '4px',
+                                                    cursor: 'pointer',
+                                                    boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                                                    transition: 'all 0.2s ease'
+                                                  }}
+                                                >
+                                                  <Sparkles size={13} />
+                                                  <span>브랜딩</span>
+                                                </button>
+
+                                                {/* Bottom Action Bar */}
                                                 <div style={{
                                                   position: 'absolute',
                                                   bottom: 0,
                                                   left: 0,
                                                   right: 0,
-                                                  backgroundColor: 'rgba(0, 0, 0, 0.82)',
-                                                  padding: '3px 4px',
+                                                  backgroundColor: 'rgba(0, 0, 0, 0.88)',
+                                                  backdropFilter: 'blur(4px)',
+                                                  padding: '5px 6px',
                                                   display: 'flex',
                                                   justifyContent: 'space-between',
-                                                  alignItems: 'center'
+                                                  alignItems: 'center',
+                                                  borderTop: '1px solid rgba(255, 255, 255, 0.1)'
                                                 }}>
                                                   {/* 1번 Toggle Button */}
                                                   <button
@@ -821,9 +1220,9 @@ export default function PhotoManagementPage() {
                                                       background: isSlot1 ? '#10b981' : 'rgba(255, 255, 255, 0.15)',
                                                       border: isSlot1 ? '1px solid #059669' : '1px solid rgba(255, 255, 255, 0.25)',
                                                       color: '#fff',
-                                                      fontSize: '10px',
+                                                      fontSize: '11px',
                                                       fontWeight: 800,
-                                                      padding: '2px 4px',
+                                                      padding: '3px 6px',
                                                       borderRadius: '4px',
                                                       cursor: 'pointer'
                                                     }}
@@ -839,9 +1238,9 @@ export default function PhotoManagementPage() {
                                                       background: isSlot2 ? '#3b82f6' : 'rgba(255, 255, 255, 0.15)',
                                                       border: isSlot2 ? '1px solid #2563eb' : '1px solid rgba(255, 255, 255, 0.25)',
                                                       color: '#fff',
-                                                      fontSize: '10px',
+                                                      fontSize: '11px',
                                                       fontWeight: 800,
-                                                      padding: '2px 4px',
+                                                      padding: '3px 6px',
                                                       borderRadius: '4px',
                                                       cursor: 'pointer'
                                                     }}
@@ -852,19 +1251,19 @@ export default function PhotoManagementPage() {
                                                   {/* Zoom Preview */}
                                                   <button
                                                     onClick={() => setLightboxPhoto({ registration: reg, photoIndex: pIdx, url })}
-                                                    title="확대 보기"
-                                                    style={{ background: 'none', border: 'none', color: '#e5e7eb', cursor: 'pointer', padding: '2px' }}
+                                                    title="크게 보기"
+                                                    style={{ background: 'none', border: 'none', color: '#e5e7eb', cursor: 'pointer', padding: '3px' }}
                                                   >
-                                                    <Eye size={13} />
+                                                    <Eye size={16} />
                                                   </button>
 
                                                   {/* Download */}
                                                   <button
                                                     onClick={() => handleDownloadPhoto(url, reg.playerName, pIdx)}
                                                     title="다운로드"
-                                                    style={{ background: 'none', border: 'none', color: '#e5e7eb', cursor: 'pointer', padding: '2px' }}
+                                                    style={{ background: 'none', border: 'none', color: '#e5e7eb', cursor: 'pointer', padding: '3px' }}
                                                   >
-                                                    <Download size={13} />
+                                                    <Download size={16} />
                                                   </button>
 
                                                   {/* Delete */}
@@ -1210,6 +1609,31 @@ export default function PhotoManagementPage() {
                     >
                       🥈 {isCur2 ? '대회용 2번 해제' : '대회용 2번으로 지정'}
                     </button>
+
+                    {/* Magic Branding Studio in Lightbox */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        navigate(`/photos/studio?id=${encodeURIComponent(lightboxPhoto.registration.id)}&url=${encodeURIComponent(lightboxPhoto.url)}`);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '8px 14px',
+                        borderRadius: '6px',
+                        border: '1px solid rgba(210, 255, 0, 0.4)',
+                        fontWeight: 800,
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                        backgroundColor: 'rgba(210, 255, 0, 0.15)',
+                        color: '#d2ff00'
+                      }}
+                      title="워터마크 마스킹 & ybbf.org 브랜딩 스튜디오 전용 페이지로 이동"
+                    >
+                      <Sparkles size={15} /> 🪄 ybbf.org 브랜딩 가공 스튜디오 열기
+                    </button>
                   </div>
 
                   <button
@@ -1233,6 +1657,149 @@ export default function PhotoManagementPage() {
                 </div>
               );
             })()}
+          </div>
+        </div>
+      )}
+
+      {/* Batch Processing Progress Modal */}
+      {batchState.isOpen && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99999,
+          padding: '16px'
+        }}>
+          <div style={{
+            backgroundColor: '#111812',
+            border: '1px solid rgba(45, 74, 31, 0.9)',
+            borderRadius: '18px',
+            padding: '28px',
+            maxWidth: '500px',
+            width: '100%',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.8)',
+            color: '#ffffff'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <div style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '12px',
+                backgroundColor: 'rgba(210, 255, 0, 0.15)',
+                border: '1px solid rgba(210, 255, 0, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#d2ff00'
+              }}>
+                <Sparkles size={22} />
+              </div>
+              <div>
+                <h3 style={{ fontSize: '18px', fontWeight: 900, margin: 0, color: '#ffffff' }}>
+                  무대 사진 일괄 자동 브랜딩
+                </h3>
+                <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+                  공식 2단 스탬프 (용인시보디빌딩협회 / ybbf.org)
+                </span>
+              </div>
+            </div>
+
+            {/* Status & Progress Bar */}
+            <div style={{ marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>
+                <span style={{ color: '#d1d5db' }}>{batchState.currentPlayerName}</span>
+                <span style={{ color: '#d2ff00', fontFamily: 'monospace' }}>
+                  {batchState.current} / {batchState.total} ({batchState.percent}%)
+                </span>
+              </div>
+
+              {/* Progress Bar Container */}
+              <div style={{
+                width: '100%',
+                height: '10px',
+                backgroundColor: 'rgba(0, 0, 0, 0.6)',
+                borderRadius: '6px',
+                overflow: 'hidden',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <div style={{
+                  width: `${batchState.percent}%`,
+                  height: '100%',
+                  backgroundColor: '#10b981',
+                  borderRadius: '6px',
+                  transition: 'width 0.3s ease',
+                  boxShadow: '0 0 10px rgba(16, 185, 129, 0.5)'
+                }} />
+              </div>
+            </div>
+
+            {/* Finished Summary or Running Notice */}
+            {batchState.status === 'done' ? (
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{
+                  backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                  border: '1px solid rgba(16, 185, 129, 0.4)',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  color: '#34d399',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  fontWeight: 700
+                }}>
+                  <CheckCircle2 size={22} style={{ flexShrink: 0, marginTop: '2px' }} />
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 900, marginBottom: '6px' }}>
+                      일괄 자동 브랜딩 처리가 완료되었습니다!
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#d1d5db', lineHeight: '1.6', fontWeight: 500 }}>
+                      • 9회 대회 전체 선수: <strong style={{ color: '#ffffff' }}>{batchState.totalContestPlayers}명</strong><br />
+                      • 무대 사진 보유 대상: <strong style={{ color: '#10b981' }}>{batchState.validPhotoPlayersCount}명</strong> ({batchState.totalPhotosProcessed}장 가공 및 R2 저장 완료)<br />
+                      • 사진 미등록 선수: <strong style={{ color: '#9ca3af' }}>{batchState.skippedNoPhotoCount}명</strong> (안전하게 제외됨)
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.4)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '12px',
+                padding: '12px 14px',
+                marginBottom: '20px',
+                fontSize: '12px',
+                color: '#9ca3af',
+                lineHeight: '1.6'
+              }}>
+                💡 9회 대회 선수 중 무대 사진이 있는 선수만 선별하여 Gemini 워터마크를 가리고 공식 <strong>'용인시보디빌딩협회 / ybbf.org'</strong> 뱃지를 합성하여 Cloudflare R2에 업로드 중입니다.
+              </div>
+            )}
+
+            {/* Modal Buttons */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                disabled={batchState.isRunning}
+                onClick={() => setBatchState(prev => ({ ...prev, isOpen: false }))}
+                style={{
+                  padding: '10px 24px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  backgroundColor: batchState.status === 'done' ? '#10b981' : 'rgba(255, 255, 255, 0.1)',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  fontSize: '13px',
+                  cursor: batchState.isRunning ? 'not-allowed' : 'pointer',
+                  opacity: batchState.isRunning ? 0.5 : 1
+                }}
+              >
+                {batchState.status === 'done' ? '확인 및 완료' : '처리 중...'}
+              </button>
+            </div>
           </div>
         </div>
       )}

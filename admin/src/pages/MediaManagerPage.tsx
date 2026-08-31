@@ -3,7 +3,7 @@ import { useMediaManager } from '../hooks/useMediaManager';
 import { adminService } from '../services/adminService';
 import { 
   Save, Upload, Loader, AlertTriangle, CheckCircle, 
-  Plus, Edit2, Trash2, Film, Youtube, Calendar, Play, FileVideo, ArrowLeft 
+  Plus, Edit2, Trash2, Film, Video, Calendar, Play, FileVideo, ArrowLeft 
 } from 'lucide-react';
 import type { MediaItem } from '../types/auth';
 
@@ -323,7 +323,7 @@ function MediaItemForm({ initialMedia, onSave, onCancel, isSaving }: MediaItemFo
                 onChange={() => setVideoSource('youtube')} 
                 disabled={isBusy}
               />
-              <Youtube size={16} style={{ color: '#ef4444' }} />
+              <Video size={16} style={{ color: '#ef4444' }} />
               유튜브 링크 입력 (공식 계정 연계)
             </label>
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }}>
@@ -377,7 +377,7 @@ function MediaItemForm({ initialMedia, onSave, onCancel, isSaving }: MediaItemFo
                 className="btn btn-secondary btn-sm"
                 style={{ padding: '2px 8px', fontSize: '11px', height: 'auto', display: 'flex', alignItems: 'center', gap: '4px' }}
               >
-                <Youtube size={12} style={{ color: '#ef4444' }} />
+                <Video size={12} style={{ color: '#ef4444' }} />
                 <span>유튜브 썸네일 자동 적용</span>
               </button>
             </div>
@@ -683,7 +683,7 @@ export default function MediaManagerPage() {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                           {item.youtubeUrl ? (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: '#ef4444', fontWeight: '600' }}>
-                              <Youtube size={14} /> Youtube 링크
+                              <Video size={14} /> Youtube 링크
                             </span>
                           ) : (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', color: 'var(--color-accent-dark)', fontWeight: '600' }}>

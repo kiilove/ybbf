@@ -69,12 +69,34 @@ CREATE TABLE IF NOT EXISTS invoices_pool (
   invoiceCreateAt TEXT,
   invoiceEditAt TEXT,
   contestId TEXT,
-  playerPhotoUrls TEXT,
   selectedPhotoUrls TEXT,
   stagePhoto1 TEXT,
   stagePhoto2 TEXT,
+  publicStagePhoto1 TEXT,
+  publicStagePhoto2 TEXT,
+  publicPhotoUrls TEXT,
+  award TEXT,
+  rank INTEGER,
+  isGrandPrix INTEGER NOT NULL DEFAULT 0,
+  playerNumber TEXT,
   submittedAt TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS contest_results (
+  id TEXT PRIMARY KEY,
+  contestId TEXT NOT NULL,
+  categoryId TEXT,
+  categoryTitle TEXT NOT NULL,
+  gradeId TEXT,
+  gradeTitle TEXT NOT NULL,
+  isOverall INTEGER NOT NULL DEFAULT 0,
+  scoreType TEXT DEFAULT 'ranking',
+  resultsJson TEXT NOT NULL,
+  createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+  updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_contest_results_contestId ON contest_results(contestId);
 
 CREATE TABLE IF NOT EXISTS system_settings (
   key TEXT PRIMARY KEY,

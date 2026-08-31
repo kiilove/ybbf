@@ -7,6 +7,7 @@ import Lenis from 'lenis';
 import Nav from './Nav';
 import GlobalCTA from './GlobalCTA';
 import Footer from './Footer';
+import { forceScrollToTop } from '../../utils/scrollUtils';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -14,9 +15,9 @@ export default function Layout() {
   const location = useLocation();
 
   useEffect(() => {
-    // Scroll to top on route change
-    window.scrollTo(0, 0);
-  }, [location.pathname]);
+    // 라우트 변경 시 모든 스크롤러(Window, Body, Lenis) 0 리셋
+    forceScrollToTop();
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     // Initialize Lenis

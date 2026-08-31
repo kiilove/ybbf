@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { 
   User as UserIcon, 
   Mail, 
@@ -33,7 +33,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   ExternalLink,
-  Video
+  Video,
+  Eye,
+  RotateCcw
 } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { 
@@ -67,8 +69,9 @@ import { MyPagePasswordSection } from '../components/mypage/MyPagePasswordSectio
 export default function MyPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const { user, completeAdditionalInfo, logout, isLoading: isAuthLoading } = useAuthStore();
-  
+
   const [activeTab, setActiveTab] = useState<'history' | 'profile' | 'password'>('history');
   const [invoices, setInvoices] = useState<RegistrationPayload[]>([]);
   const [isInvoicesLoading, setIsInvoicesLoading] = useState(false);
@@ -144,8 +147,39 @@ export default function MyPage() {
     playerGym: !editingInvoice?.playerGym || editingInvoice.playerGym.trim().length < 1,
   };
 
-  // Load user profile and fetch invoices
+  const previewUid = searchParams.get('previewUid');
+
+  // Load user profile and fetch invoices (Support Admin Direct Player Inspection via previewUid)
   useEffect(() => {
+    if (previewUid) {
+      const loadPreviewInvoices = async () => {
+        setIsInvoicesLoading(true);
+        try {
+          const data = await getUserInvoices(previewUid);
+          setInvoices(data);
+          if (data && data.length > 0) {
+            const first = data[0];
+            setProfileData({
+              name: first.playerName || '선수',
+              nickname: '',
+              birth: first.playerBirth || '',
+              tel: first.playerTel || '',
+              gym: first.playerGym || '',
+              gender: first.playerGender || 'm',
+              profilePhotoUrl: first.playerPhotoUrl || first.publicStagePhoto1 || first.stagePhoto1 || '',
+            });
+          }
+        } catch (err) {
+          console.error('검수 인보이스 조회 오류:', err);
+        } finally {
+          setIsInvoicesLoading(false);
+          setIsFirstLoad(false);
+        }
+      };
+      loadPreviewInvoices();
+      return;
+    }
+
     if (user) {
       setProfileData({
         name: user.profile?.name || '',
@@ -170,8 +204,11 @@ export default function MyPage() {
         }
       };
       loadInvoices();
+    } else {
+      setIsInvoicesLoading(false);
+      setIsFirstLoad(false);
     }
-  }, [user]);
+  }, [user, previewUid]);
 
   // Form Validation for profile
   useEffect(() => {
@@ -738,16 +775,18 @@ export default function MyPage() {
     canClick: (!editingValidate.playerName && !editingValidate.playerBirth && !editingValidate.playerTel && !editingValidate.playerGym) && (editingInvoice?.joins || []).length > 0 && (hasNotice ? agreedNoticeIds.length >= mandatoryNotices.length : true),
   });
 
-  if (!user) {
+  if (!user && !previewUid) {
     return (
       <div className="min-h-screen bg-[#0a0a0a] pt-32 pb-24 px-4 flex items-center justify-center">
-        <div className="text-center max-w-md bg-[#161a16] border border-white/10 p-8 rounded-2xl">
+        <div className="text-center max-w-md bg-[#161a16] border border-white/10 p-8 rounded-2xl shadow-2xl">
           <ShieldAlert className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">로그인이 필요합니다</h2>
-          <p className="text-xs text-white/60 mb-6">마이페이지 조회를 위해 먼저 로그인해 주세요.</p>
+          <h2 className="text-xl font-black text-white mb-2">로그인이 필요합니다</h2>
+          <p className="text-xs text-white/60 mb-6 leading-relaxed">
+            마이페이지 및 대회 무대 사진 조회를 위해 먼저 로그인해 주세요.
+          </p>
           <button
             onClick={() => navigate('/login')}
-            className="w-full bg-accent text-black font-bold py-3 rounded-xl text-xs uppercase"
+            className="w-full bg-accent text-black font-black py-3.5 rounded-xl text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-accent/20 hover:scale-[1.02] transition-transform"
           >
             로그인 페이지로 이동
           </button>
@@ -834,6 +873,19 @@ export default function MyPage() {
 
       <div className="max-w-[1000px] mx-auto relative">
         
+        {/* 🌟 관리자 선수 화면 검수 모드 배너 (previewUid) */}
+        {previewUid && (
+          <div className="mb-6 px-4 py-3 bg-[#121a14] border border-[#d2ff00]/40 rounded-xl flex items-center justify-between gap-3 text-xs font-sans shadow-xl">
+            <div className="flex items-center gap-2 text-[#d2ff00] font-bold">
+              <Sparkles className="w-4 h-4 text-[#d2ff00]" />
+              <span>[선수 화면 검수] <strong className="text-white underline">{profileData.name || '선수'}</strong>님의 마이페이지 실시간 확인 중</span>
+            </div>
+            <span className="text-[11px] text-white/50 font-mono hidden sm:inline">
+              선수 시점 동일 화면
+            </span>
+          </div>
+        )}
+
         {/* PROFILE HEADER CARD */}
         <div className="bg-[#0c0c0c] border border-white/5 rounded-2xl p-6 sm:p-8 mb-8 shadow-2xl relative overflow-hidden">
           <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6">
@@ -843,9 +895,9 @@ export default function MyPage() {
                 className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-accent/10 border border-accent/30 overflow-hidden flex items-center justify-center text-accent shrink-0 shadow-inner cursor-pointer relative group"
                 title="프로필 사진 수정"
               >
-                {user.profile?.profilePhotoUrl || profileData.profilePhotoUrl ? (
+                {profileData.profilePhotoUrl || user?.profile?.profilePhotoUrl ? (
                   <img 
-                    src={profileData.profilePhotoUrl || user.profile?.profilePhotoUrl} 
+                    src={profileData.profilePhotoUrl || user?.profile?.profilePhotoUrl} 
                     alt="선수 아바타" 
                     className="w-full h-full object-cover" 
                   />
@@ -857,40 +909,42 @@ export default function MyPage() {
               <div className="text-center sm:text-left">
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mb-1">
                   <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-                    {user.profile?.name || '선수님'}
+                    {profileData.name || user?.profile?.name || '선수님'}
                   </h1>
                   
-                  {(user.profile?.nickname || profileData.nickname) && (
+                  {(profileData.nickname || user?.profile?.nickname) && (
                     <span className="text-xs text-accent font-bold font-mono bg-accent/10 border border-accent/30 px-2 py-0.5 rounded">
-                      @{user.profile?.nickname || profileData.nickname}
+                      @{profileData.nickname || user?.profile?.nickname}
                     </span>
                   )}
 
                   <span className="text-[10px] bg-white/10 border border-white/20 text-white/80 font-bold px-2 py-0.5 rounded font-mono">
-                    {user.profile?.gender === 'f' ? '여성' : '남성'}
+                    {(profileData.gender || user?.profile?.gender || 'm') === 'f' ? '여성' : '남성'}
                   </span>
                 </div>
 
-                <p className="text-xs text-white/50 font-mono mb-2">{user.email}</p>
+                <p className="text-xs text-white/50 font-mono mb-2">{user?.email || ''}</p>
 
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs text-white/70">
                   <span className="flex items-center gap-1 font-mono">
-                    <Phone className="w-3.5 h-3.5 text-accent/80" /> {user.profile?.tel || '연락처 미등록'}
+                    <Phone className="w-3.5 h-3.5 text-accent/80" /> {user?.profile?.tel || '전화번호 미등록'}
                   </span>
                   <span className="text-white/20">•</span>
                   <span className="flex items-center gap-1">
-                    <Building className="w-3.5 h-3.5 text-accent/80" /> {user.profile?.gym || '소속 미등록'}
+                    <Building className="w-3.5 h-3.5 text-accent/80" /> {user?.profile?.gym || '소속 헬스장 미등록'}
                   </span>
                 </div>
               </div>
             </div>
 
-            <button
-              onClick={logout}
-              className="flex items-center gap-2 border border-white/10 bg-white/5 hover:bg-red-950/40 hover:text-red-300 hover:border-red-500/30 text-white/70 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
-            >
-              <LogOut className="w-4 h-4" /> 로그아웃
-            </button>
+            {user && (
+              <button
+                onClick={logout}
+                className="flex items-center gap-2 border border-white/10 bg-white/5 hover:bg-red-950/40 hover:text-red-300 hover:border-red-500/30 text-white/70 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0"
+              >
+                <LogOut className="w-4 h-4" /> 로그아웃
+              </button>
+            )}
           </div>
         </div>
 
@@ -941,12 +995,14 @@ export default function MyPage() {
                 <ClipboardList className="w-12 h-12 text-white/20 mx-auto mb-4" />
                 <h3 className="text-base font-bold text-white mb-2">접수된 대회 신청 내역이 없습니다</h3>
                 <p className="text-xs text-white/50 mb-6">원하시는 대회를 선택하여 온라인 참가 신청을 진행해 보세요.</p>
-                <button
-                  onClick={() => navigate('/competition')}
-                  className="bg-accent hover:bg-white text-black font-black px-6 py-3 rounded-xl text-xs uppercase transition-all shadow-[0_0_15px_rgba(210,255,0,0.15)] inline-flex items-center gap-2 cursor-pointer"
-                >
-                  대회 신청 목록 보기 <ChevronRight className="w-4 h-4" />
-                </button>
+                <div className="flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    onClick={() => navigate('/competition')}
+                    className="bg-accent hover:bg-white text-black font-black px-6 py-3 rounded-xl text-xs uppercase transition-all shadow-[0_0_15px_rgba(210,255,0,0.15)] inline-flex items-center gap-2 cursor-pointer"
+                  >
+                    대회 신청 목록 보기 <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-6">

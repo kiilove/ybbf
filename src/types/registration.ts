@@ -55,6 +55,7 @@ export interface RegistrationPayload {
   id: string;
   playerUid: string;
   playerName: string;
+  playerNumber?: string | number;
   playerGender: 'm' | 'f';
   playerBirth: string;
   playerTel: string;
@@ -63,6 +64,12 @@ export interface RegistrationPayload {
   playerText?: string;
   playerPhotoUrl?: string;
   playerPhotoUrls?: string[];
+  stagePhoto1?: string;
+  stagePhoto2?: string;
+  selectedPhotoUrls?: string[];
+  publicStagePhoto1?: string;
+  publicStagePhoto2?: string;
+  publicPhotoUrls?: string[];
   playerService: boolean;
   joins: JoinItem[];
   contestPriceSum: number;

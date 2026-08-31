@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { Users, FileText, LogOut, ShieldAlert, Film, Settings, Megaphone, ShieldCheck } from 'lucide-react';
+import { Users, FileText, LogOut, ShieldAlert, Film, Settings, Megaphone, ShieldCheck, Trophy, Building2, ClipboardList, Award } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 
 export default function Layout() {
@@ -17,6 +17,9 @@ export default function Layout() {
   // 현재 라우트 경로에 따른 화면 타이틀 노출
   const getPageTitle = () => {
     const path = location.pathname;
+    if (path.startsWith('/contest-results')) return '대회 성적 및 결과 관리';
+    if (path.startsWith('/sponsors')) return '스폰서 & 공식 파트너 관리';
+    if (path.startsWith('/pre-registrations')) return '2027 제10회 사전 접수자 관리';
     if (path.startsWith('/hero/new')) return '신규 선수 등록';
     if (path.startsWith('/hero/edit')) return '선수 정보 수정';
     if (path.startsWith('/hero')) return '히어로 섹션 선수 관리';
@@ -37,6 +40,38 @@ export default function Layout() {
         </div>
         
         <nav className="sidebar-menu">
+          <NavLink 
+            to="/contest-results" 
+            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          >
+            <Trophy size={18} />
+            <span>대회 성적 및 결과 관리</span>
+          </NavLink>
+
+          <NavLink 
+            to="/sponsors" 
+            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          >
+            <Building2 size={18} />
+            <span>스폰서 & 파트너 관리</span>
+          </NavLink>
+
+          <NavLink 
+            to="/sponsor-reports" 
+            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          >
+            <Award size={18} />
+            <span>광고노출 성과 리포트</span>
+          </NavLink>
+
+          <NavLink 
+            to="/pre-registrations" 
+            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+          >
+            <ClipboardList size={18} />
+            <span>2027 사전 접수 관리</span>
+          </NavLink>
+
           <NavLink 
             to="/hero" 
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}

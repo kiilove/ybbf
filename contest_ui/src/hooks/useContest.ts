@@ -57,7 +57,7 @@ export const useContest = create<ContestState>((set, get) => ({
   lastSyncedContestId: null,
   lastSyncedTime: 0,
 
-  fetchList: async (forceSync = false, silent = false) => {
+  fetchList: async (_forceSync = false, silent = false) => {
     const hasData = get().registrations.length > 0;
     if (!silent && !hasData) {
       set({ isLoading: true, error: null });
@@ -66,23 +66,9 @@ export const useContest = create<ContestState>((set, get) => ({
     }
 
     try {
-      const { filters, lastSyncedContestId, lastSyncedTime } = get();
-      const now = Date.now();
-      const currentContestId = filters.contestId || 'all';
+      const { filters } = get();
 
-      // ⚡️ 1분 이내 동기화 이력이 있고 필터만 바꿀 때(forceSync=false)는 Firestore 동기화 건너뛰고 D1 초고속 조회 (약 10ms)
-      const isNeedSync = forceSync || (lastSyncedContestId !== currentContestId) || (now - lastSyncedTime > 60 * 1000);
-
-      if (isNeedSync) {
-        try {
-          await contestService.syncFromFirestore(filters.contestId);
-          set({ lastSyncedContestId: currentContestId, lastSyncedTime: now });
-        } catch (syncErr) {
-          console.warn('자동 Firestore 동기화 경고:', syncErr);
-        }
-      }
-
-      // 2. 최신 백엔드 명단 로드 (D1 DB 질의)
+      // 1. 최신 백엔드 명단 로드 (D1 DB 질의)
       const apiFilters = {
         contestId: filters.contestId || undefined,
         keyword: filters.keyword || undefined,
@@ -90,11 +76,28 @@ export const useContest = create<ContestState>((set, get) => ({
         isCanceled: filters.isCanceled === 'all' ? undefined : filters.isCanceled
       };
 
-      const list = await contestService.fetchRegistrations(apiFilters);
-      set({ registrations: list, isLoading: false });
+      let list: Registration[] = [];
+      try {
+        list = await contestService.fetchRegistrations(apiFilters);
+      } catch (apiErr) {
+        console.warn('D1 API 조회 실패, Firestore 직접 조회로 전환합니다:', apiErr);
+      }
+
+      // 2. 만약 D1 조회가 비어있거나 실패한 경우 Firestore 직접 조회로 즉시 안전 로드
+      if (!list || list.length === 0) {
+        try {
+          list = await contestService.fetchRegistrationsFromFirestore(filters.contestId);
+        } catch (fbErr) {
+          console.warn('Firestore Fallback 실패:', fbErr);
+        }
+      }
+
+      set({ registrations: list || [], isLoading: false });
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : '접수 명단을 불러오는데 실패했습니다.';
-      set({ error: errMsg, isLoading: false });
+      set({ error: errMsg, isLoading: false, registrations: get().registrations });
+    } finally {
+      set({ isLoading: false });
     }
   },
 
@@ -103,10 +106,16 @@ export const useContest = create<ContestState>((set, get) => ({
     photoUrls: string[],
     selectedPhotoUrls: string[],
     stagePhoto1?: string,
-    stagePhoto2?: string
+    stagePhoto2?: string,
+    publicStagePhoto1?: string,
+    publicStagePhoto2?: string,
+    publicPhotoUrls?: string[]
   ) => {
-    const s1 = stagePhoto1 !== undefined ? stagePhoto1 : (selectedPhotoUrls[0] || '');
-    const s2 = stagePhoto2 !== undefined ? stagePhoto2 : (selectedPhotoUrls[1] || '');
+    const s1 = stagePhoto1 !== undefined ? stagePhoto1 : (selectedPhotoUrls[0] || registration.stagePhoto1 || '');
+    const s2 = stagePhoto2 !== undefined ? stagePhoto2 : (selectedPhotoUrls[1] || registration.stagePhoto2 || '');
+    const pub1 = publicStagePhoto1 !== undefined ? publicStagePhoto1 : (registration.publicStagePhoto1 || '');
+    const pub2 = publicStagePhoto2 !== undefined ? publicStagePhoto2 : (registration.publicStagePhoto2 || '');
+    const pubPhotos = publicPhotoUrls !== undefined ? publicPhotoUrls : (registration.publicPhotoUrls || []);
     const mainPhotoUrl = (s1 && s1.trim() !== '') ? s1 : (s2 || photoUrls[0] || '');
 
     const updatedRegistration: Registration = {
@@ -116,7 +125,10 @@ export const useContest = create<ContestState>((set, get) => ({
       photos: photoUrls,
       selectedPhotoUrls: [s1, s2],
       stagePhoto1: s1,
-      stagePhoto2: s2
+      stagePhoto2: s2,
+      publicStagePhoto1: pub1,
+      publicStagePhoto2: pub2,
+      publicPhotoUrls: pubPhotos
     };
 
     // ⚡️ 1. 즉시 로컬 Zustand 상태 낙관적(Optimistic) 갱신 ➔ 화면 깜빡임/지연 0ms

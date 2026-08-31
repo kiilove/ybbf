@@ -249,10 +249,13 @@ export default function ChampionsPage() {
                 >
                   <div className="relative w-full aspect-[4/5] overflow-hidden bg-[#08080c]">
                     <img
-                      src={champ.photoUrl}
+                      src={champ.photoUrl || '/cutout1.png'}
                       alt={champ.name}
                       className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-108"
                       loading="lazy"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = '/cutout1.png';
+                      }}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#030305] via-[#030305]/20 to-transparent pointer-events-none" />
 

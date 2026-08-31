@@ -220,7 +220,7 @@ export default function Hero() {
         } as React.CSSProperties}
       >
         {/* ═══ LAYER 0: WebGL (실시간 웨이브 + 선택된 챔피언/포즈 텍스처) ═══ */}
-        <WebGLHero key={`${currentHero.id}-${activePhotoUrl}`} imageUrl={activePhotoUrl} />
+        <WebGLHero imageUrl={activePhotoUrl} />
 
         {/* ═══ LAYER 1: 하단 상시 노출 네비게이션 컨트롤러 ═══ */}
         <div

@@ -23,7 +23,6 @@ import PlayerIntroPage from './pages/overlay/PlayerIntroPage';
 import PreMeasurementUploadPage from './pages/PreMeasurementUploadPage';
 import PlayerShowcasePage from './pages/showcase/PlayerShowcasePage';
 import PreRegistrationPage from './pages/competition/PreRegistrationPage';
-import DebugBadge from './components/shared/DebugBadge';
 import ScrollToTop from './components/shared/ScrollToTop';
 
 export default function App() {
@@ -60,7 +59,6 @@ export default function App() {
           </Route>
           <Route path="player-intro" element={<PlayerIntroPage />} />
         </Routes>
-        <DebugBadge />
       </AuthProvider>
     </BrowserRouter>
   );

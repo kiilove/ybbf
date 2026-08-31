@@ -156,13 +156,21 @@ export default function WebGLHero({ imageUrl }: WebGLHeroProps) {
       if (programRef.current) {
         const newTexture = new Texture(gl, {
           image: img,
-          generateMipmaps: true,
-          minFilter: gl.LINEAR_MIPMAP_LINEAR,
+          generateMipmaps: false,
+          minFilter: gl.LINEAR,
+          magFilter: gl.LINEAR,
+          wrapS: gl.CLAMP_TO_EDGE,
+          wrapT: gl.CLAMP_TO_EDGE,
         });
         (newTexture as any).needsUpdate = true;
         programRef.current.uniforms.uBase.value = newTexture;
         const baseAspect = img.naturalWidth / img.naturalHeight;
         programRef.current.uniforms.uBaseAspect.value = baseAspect;
+      }
+    };
+    img.onerror = () => {
+      if (img.src !== DEFAULT_BASE_IMAGE) {
+        img.src = DEFAULT_BASE_IMAGE;
       }
     };
     img.src = targetImage;
@@ -173,85 +181,117 @@ export default function WebGLHero({ imageUrl }: WebGLHeroProps) {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const renderer = new Renderer({
-      canvas,
-      width: container.clientWidth,
-      height: container.clientHeight,
-      dpr: Math.min(window.devicePixelRatio, 2),
-      alpha: false,
-    });
-    const gl = renderer.gl;
-    glRef.current = gl;
-    gl.clearColor(0.015, 0.015, 0.02, 1);
-
-    const texture = new Texture(gl, {
-      generateMipmaps: true,
-      minFilter: gl.LINEAR_MIPMAP_LINEAR,
-    });
-    
-    let baseAspect = 1;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      texture.image = img;
-      (texture as any).needsUpdate = true;
-      baseAspect = img.naturalWidth / img.naturalHeight;
-      if (programRef.current) {
-        programRef.current.uniforms.uBaseAspect.value = baseAspect;
-      }
-    };
-    img.src = targetImage;
-
-    const geometry = new Triangle(gl);
-    const program = new Program(gl, {
-      vertex,
-      fragment,
-      uniforms: {
-        uBase:       { value: texture },
-        uTime:       { value: 0 },
-        uRes:        { value: [container.clientWidth, container.clientHeight] },
-        uAspect:     { value: container.clientWidth / container.clientHeight },
-        uBaseAspect: { value: 1.0 },
-      },
-    });
-    programRef.current = program;
-
-    const mesh = new Mesh(gl, { geometry, program });
-
-    const resize = () => {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      renderer.setSize(w, h);
-      program.uniforms.uRes.value = [w, h];
-      program.uniforms.uAspect.value = w / h;
-    };
-    window.addEventListener('resize', resize);
-    resize();
-
+    let renderer: Renderer | null = null;
     let animationId: number;
-    let startTime = performance.now();
-    const update = (now: number) => {
-      animationId = requestAnimationFrame(update);
-      program.uniforms.uTime.value = (now - startTime) * 0.001;
-      renderer.render({ scene: mesh });
-    };
-    animationId = requestAnimationFrame(update);
 
-    return () => {
-      window.removeEventListener('resize', resize);
-      cancelAnimationFrame(animationId);
-    };
+    try {
+      renderer = new Renderer({
+        canvas,
+        width: container.clientWidth,
+        height: container.clientHeight,
+        dpr: Math.min(window.devicePixelRatio || 1, 2),
+        alpha: false,
+      });
+      const gl = renderer.gl;
+      glRef.current = gl;
+      gl.clearColor(0.015, 0.015, 0.02, 1);
+
+      const texture = new Texture(gl, {
+        generateMipmaps: false,
+        minFilter: gl.LINEAR,
+        magFilter: gl.LINEAR,
+        wrapS: gl.CLAMP_TO_EDGE,
+        wrapT: gl.CLAMP_TO_EDGE,
+      });
+      
+      let baseAspect = 1;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        texture.image = img;
+        (texture as any).needsUpdate = true;
+        baseAspect = img.naturalWidth / img.naturalHeight;
+        if (programRef.current) {
+          programRef.current.uniforms.uBaseAspect.value = baseAspect;
+        }
+      };
+      img.onerror = () => {
+        if (img.src !== DEFAULT_BASE_IMAGE) {
+          img.src = DEFAULT_BASE_IMAGE;
+        }
+      };
+      img.src = targetImage;
+
+      const geometry = new Triangle(gl);
+      const program = new Program(gl, {
+        vertex,
+        fragment,
+        uniforms: {
+          uBase:       { value: texture },
+          uTime:       { value: 0 },
+          uRes:        { value: [container.clientWidth, container.clientHeight] },
+          uAspect:     { value: container.clientWidth / container.clientHeight },
+          uBaseAspect: { value: 1.0 },
+        },
+      });
+      programRef.current = program;
+
+      const mesh = new Mesh(gl, { geometry, program });
+
+      const resize = () => {
+        if (!container || !renderer) return;
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        renderer.setSize(w, h);
+        if (programRef.current) {
+          programRef.current.uniforms.uRes.value = [w, h];
+          programRef.current.uniforms.uAspect.value = w / h;
+        }
+      };
+      window.addEventListener('resize', resize);
+      resize();
+
+      let startTime = performance.now();
+      const update = (now: number) => {
+        animationId = requestAnimationFrame(update);
+        if (programRef.current && renderer) {
+          programRef.current.uniforms.uTime.value = (now - startTime) * 0.001;
+          renderer.render({ scene: mesh });
+        }
+      };
+      animationId = requestAnimationFrame(update);
+
+      return () => {
+        window.removeEventListener('resize', resize);
+        cancelAnimationFrame(animationId);
+      };
+    } catch (err) {
+      console.warn('[WebGLHero] WebGL initialization fallback to native image:', err);
+    }
   }, []);
 
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 w-full h-full pointer-events-none bg-[#030306]"
+      className="absolute inset-0 w-full h-full pointer-events-none bg-[#030306] overflow-hidden"
       style={{ zIndex: 0 }}
     >
+      {/* 🖼️ 모바일 및 WebGL 미지원 기기를 위한 100% 안전 네이티브 이미지 백업 레이어 */}
+      <img
+        src={targetImage}
+        alt="Champion Hero"
+        className="absolute inset-0 w-full h-full object-contain object-center pointer-events-none opacity-90 transition-opacity duration-300"
+        loading="eager"
+        decoding="async"
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).src = DEFAULT_BASE_IMAGE;
+        }}
+      />
+
+      {/* 🌊 WebGL 오라 셰이더 캔버스 */}
       <canvas
         ref={canvasRef}
-        className="w-full h-full block"
+        className="w-full h-full block relative z-10"
       />
     </div>
   );

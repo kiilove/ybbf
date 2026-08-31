@@ -5,6 +5,8 @@ import { Renderer, Program, Mesh, Triangle, Texture } from 'ogl';
    LegendWebGLHero — 레전드 상세 전용 (골드 시네마틱 무대 후광 + 선명한 인물 렌더링)
    ──────────────────────────────────────────────── */
 
+const DEFAULT_BASE_IMAGE = 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg';
+
 const vertex = /* glsl */ `
   attribute vec2 position;
   attribute vec2 uv;
@@ -100,7 +102,7 @@ export default function LegendWebGLHero({ imageUrl }: LegendWebGLHeroProps) {
   const glRef = useRef<any>(null);
   const programRef = useRef<Program | null>(null);
 
-  const targetImage = imageUrl || '/cutout1.png';
+  const targetImage = imageUrl || DEFAULT_BASE_IMAGE;
 
   useEffect(() => {
     if (!glRef.current || !programRef.current) return;
@@ -112,13 +114,21 @@ export default function LegendWebGLHero({ imageUrl }: LegendWebGLHeroProps) {
       if (programRef.current) {
         const newTexture = new Texture(gl, {
           image: img,
-          generateMipmaps: true,
-          minFilter: gl.LINEAR_MIPMAP_LINEAR,
+          generateMipmaps: false,
+          minFilter: gl.LINEAR,
+          magFilter: gl.LINEAR,
+          wrapS: gl.CLAMP_TO_EDGE,
+          wrapT: gl.CLAMP_TO_EDGE,
         });
         (newTexture as any).needsUpdate = true;
         programRef.current.uniforms.uBase.value = newTexture;
         const baseAspect = img.naturalWidth / img.naturalHeight;
         programRef.current.uniforms.uBaseAspect.value = baseAspect;
+      }
+    };
+    img.onerror = () => {
+      if (img.src !== DEFAULT_BASE_IMAGE) {
+        img.src = DEFAULT_BASE_IMAGE;
       }
     };
     img.src = targetImage;
@@ -129,74 +139,93 @@ export default function LegendWebGLHero({ imageUrl }: LegendWebGLHeroProps) {
     const container = containerRef.current;
     if (!canvas || !container) return;
 
-    const renderer = new Renderer({
-      canvas,
-      width: container.clientWidth,
-      height: container.clientHeight,
-      dpr: Math.min(window.devicePixelRatio, 2),
-      alpha: false,
-    });
-    const gl = renderer.gl;
-    glRef.current = gl;
-    gl.clearColor(0.015, 0.015, 0.02, 1);
-
-    const texture = new Texture(gl, {
-      generateMipmaps: true,
-      minFilter: gl.LINEAR_MIPMAP_LINEAR,
-    });
-    
-    let baseAspect = 1;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      texture.image = img;
-      (texture as any).needsUpdate = true;
-      baseAspect = img.naturalWidth / img.naturalHeight;
-      if (programRef.current) {
-        programRef.current.uniforms.uBaseAspect.value = baseAspect;
-      }
-    };
-    img.src = targetImage;
-
-    const geometry = new Triangle(gl);
-    const program = new Program(gl, {
-      vertex,
-      fragment,
-      uniforms: {
-        uBase:       { value: texture },
-        uTime:       { value: 0 },
-        uRes:        { value: [container.clientWidth, container.clientHeight] },
-        uAspect:     { value: container.clientWidth / container.clientHeight },
-        uBaseAspect: { value: 1.0 },
-      },
-    });
-    programRef.current = program;
-
-    const mesh = new Mesh(gl, { geometry, program });
-
-    const resize = () => {
-      const w = container.clientWidth;
-      const h = container.clientHeight;
-      renderer.setSize(w, h);
-      program.uniforms.uRes.value = [w, h];
-      program.uniforms.uAspect.value = w / h;
-    };
-    window.addEventListener('resize', resize);
-    resize();
-
+    let renderer: Renderer | null = null;
     let animationId: number;
-    let startTime = performance.now();
-    const update = (now: number) => {
-      animationId = requestAnimationFrame(update);
-      program.uniforms.uTime.value = (now - startTime) * 0.001;
-      renderer.render({ scene: mesh });
-    };
-    animationId = requestAnimationFrame(update);
 
-    return () => {
-      window.removeEventListener('resize', resize);
-      cancelAnimationFrame(animationId);
-    };
+    try {
+      renderer = new Renderer({
+        canvas,
+        width: container.clientWidth,
+        height: container.clientHeight,
+        dpr: Math.min(window.devicePixelRatio || 1, 2),
+        alpha: false,
+      });
+      const gl = renderer.gl;
+      glRef.current = gl;
+      gl.clearColor(0.015, 0.015, 0.02, 1);
+
+      const texture = new Texture(gl, {
+        generateMipmaps: false,
+        minFilter: gl.LINEAR,
+        magFilter: gl.LINEAR,
+        wrapS: gl.CLAMP_TO_EDGE,
+        wrapT: gl.CLAMP_TO_EDGE,
+      });
+      
+      let baseAspect = 1;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        texture.image = img;
+        (texture as any).needsUpdate = true;
+        baseAspect = img.naturalWidth / img.naturalHeight;
+        if (programRef.current) {
+          programRef.current.uniforms.uBaseAspect.value = baseAspect;
+        }
+      };
+      img.onerror = () => {
+        if (img.src !== DEFAULT_BASE_IMAGE) {
+          img.src = DEFAULT_BASE_IMAGE;
+        }
+      };
+      img.src = targetImage;
+
+      const geometry = new Triangle(gl);
+      const program = new Program(gl, {
+        vertex,
+        fragment,
+        uniforms: {
+          uBase:       { value: texture },
+          uTime:       { value: 0 },
+          uRes:        { value: [container.clientWidth, container.clientHeight] },
+          uAspect:     { value: container.clientWidth / container.clientHeight },
+          uBaseAspect: { value: 1.0 },
+        },
+      });
+      programRef.current = program;
+
+      const mesh = new Mesh(gl, { geometry, program });
+
+      const resize = () => {
+        if (!container || !renderer) return;
+        const w = container.clientWidth;
+        const h = container.clientHeight;
+        renderer.setSize(w, h);
+        if (programRef.current) {
+          programRef.current.uniforms.uRes.value = [w, h];
+          programRef.current.uniforms.uAspect.value = w / h;
+        }
+      };
+      window.addEventListener('resize', resize);
+      resize();
+
+      let startTime = performance.now();
+      const update = (now: number) => {
+        animationId = requestAnimationFrame(update);
+        if (programRef.current && renderer) {
+          programRef.current.uniforms.uTime.value = (now - startTime) * 0.001;
+          renderer.render({ scene: mesh });
+        }
+      };
+      animationId = requestAnimationFrame(update);
+
+      return () => {
+        window.removeEventListener('resize', resize);
+        cancelAnimationFrame(animationId);
+      };
+    } catch (err) {
+      console.warn('[LegendWebGLHero] WebGL initialization fallback to native image:', err);
+    }
   }, []);
 
   return (

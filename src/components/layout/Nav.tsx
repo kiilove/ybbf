@@ -23,20 +23,23 @@ export default function Nav() {
   const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [activeImage, setActiveImage] = useState(menuItems[0].image);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isAtHeroTop, setIsAtHeroTop] = useState(true); // 홈 최상단: YBBF 화이트
 
   useEffect(() => {
-    const isNotHome = location.pathname !== '/';
+    const isHome = location.pathname === '/';
     
     const handleScroll = () => {
       setScrolled(window.scrollY > 60);
-      if (isNotHome) {
-        setIsDarkTheme(true);
+      if (isHome) {
+        setIsAtHeroTop(window.scrollY < 10);
+        setIsDarkTheme(true); // 홈에서는 항상 다크(네온) 유지
       } else {
-        setIsDarkTheme(window.scrollY > window.innerHeight * 0.4);
+        setIsAtHeroTop(false);
+        setIsDarkTheme(true);
       }
     };
 
-    handleScroll(); // 초기 진입 시 바로 적용
+    handleScroll();
     
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
@@ -78,7 +81,7 @@ export default function Nav() {
             href="/" 
             onClick={() => setIsOpen(false)}
             className={`text-display text-[3.5rem] md:text-[6rem] leading-none font-black uppercase tracking-tighter cursor-grow italic transition-colors duration-500 ${
-              isDarkTheme || isOpen ? 'text-accent drop-shadow-[0_0_20px_rgba(204,255,0,0.3)]' : 'text-black'
+              isAtHeroTop ? 'text-white' : isDarkTheme || isOpen ? 'text-accent drop-shadow-[0_0_20px_rgba(204,255,0,0.3)]' : 'text-black'
             }`}
           >
             YBBF

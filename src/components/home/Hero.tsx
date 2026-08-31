@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import WebGLHero from './WebGLHero';
+import CSSHero from './CSSHero';
+// import WebGLHero from './WebGLHero'; // WebGL 비활성화 — CSS로 대체하여 모바일 즉시 반응
 import { useSettingsStore } from '../../store/useSettingsStore';
-import { ChevronLeft, ChevronRight, Trophy, Sparkles, Crown } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -38,7 +39,7 @@ function formatSmartHeroPlayers(rawList: any[]): any[] {
       const distinctCount = Math.max(existing.classes.length, 2);
       existing.crownCount = distinctCount;
       existing.isMultiCrown = distinctCount >= 2;
-      existing.crownBadge = `👑 ${distinctCount}관왕`;
+      existing.crownBadge = `${distinctCount}관왕`;
       existing.heroClass = `${existing.classes.join(' · ')} (${distinctCount}관왕)`;
       existing.heroTitles = `2026 제9회 용인특례시 보디빌딩대회 ${existing.classes.join(' & ')} ${distinctCount}관왕 오버롤 그랑프리`;
       
@@ -61,13 +62,49 @@ function formatSmartHeroPlayers(rawList: any[]): any[] {
         heroClass: isMulti ? `${initialClasses.join(' · ')} (${count}관왕)` : p.heroClass,
         crownCount: count,
         isMultiCrown: isMulti,
-        crownBadge: isMulti ? `👑 ${count}관왕` : 'GRAND PRIX',
+        crownBadge: isMulti ? `${count}관왕` : 'GRAND PRIX',
         classes: initialClasses.length > 0 ? initialClasses : [rawClass || '보디빌딩']
       });
     }
   });
 
   return Array.from(map.values());
+}
+
+// 최초 로딩 시 일반부(강승민), 비키니(김민경), 클래식보디빌딩(유용수) 3대 그랑프리 중 1/3 (33.3%) 균등 무작위 선택
+function getPriorityHeroIndex(players: any[]): number {
+  if (!players || players.length === 0) return 0;
+  
+  const priorityNames = ['강승민', '김민경', '유용수'];
+  // 3명 중 무작위 1명 먼저 균등 선택 (1/3 확률)
+  const targetName = priorityNames[Math.floor(Math.random() * priorityNames.length)];
+  
+  const targetIdx = players.findIndex(p => (p.heroName || '').includes(targetName));
+  if (targetIdx >= 0) {
+    return targetIdx;
+  }
+
+  // 예외 시 카테고리 매칭
+  const priorityIndices: number[] = [];
+  players.forEach((p, idx) => {
+    const name = (p.heroName || '').trim();
+    const cls = ((p.heroClass || '') + ' ' + (p.heroTitles || '')).toLowerCase();
+    
+    const isPriority = 
+      name.includes('강승민') || cls.includes('일반부') ||
+      name.includes('김민경') || cls.includes('비키니') ||
+      name.includes('유용수') || cls.includes('클래식');
+      
+    if (isPriority) {
+      priorityIndices.push(idx);
+    }
+  });
+
+  if (priorityIndices.length > 0) {
+    const rand = Math.floor(Math.random() * priorityIndices.length);
+    return priorityIndices[rand];
+  }
+  return 0;
 }
 
 // 가중치 계산 함수 (일반부, 클래식 보디빌딩, 비키니에 기본 1 + 5 = 6 가중치 부여)
@@ -112,7 +149,20 @@ function getWeightedRandomIndex(players: any[], excludeIndex = -1): number {
   return 0;
 }
 
+// D1 순서와 100% 동일하게 일치시킨 기본 챔피언 데이터셋
 const DEFAULT_HERO_PLAYERS = [
+  {
+    id: 'hero-gp-oh-geun-seok',
+    heroName: '오근석',
+    heroClass: '남자 스포츠 모델 (오버롤)',
+    heroHeight: '175',
+    heroWeight: '',
+    heroGym: '피트니스 유 짐',
+    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 남자 스포츠 모델 오버롤 그랑프리 챔피언',
+    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961920111_Athlete_performing_side_chest_pose_202608290905.jpeg',
+    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961928630_Man_striking_bicep_pose_202608290905.jpeg',
+    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961920111_Athlete_performing_side_chest_pose_202608290905.jpeg',
+  },
   {
     id: 'hero-gp-kang-seung-min',
     heroName: '강승민',
@@ -124,6 +174,18 @@ const DEFAULT_HERO_PLAYERS = [
     stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg',
     stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973719285_Athlete_striking_bicep_pose_202608291221.jpeg',
     heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_fbbfb18c-875d-4eaf-8145-5d74903ee440/1787973711190_Athlete_striking_side_chest_pose_202608291221.jpeg',
+  },
+  {
+    id: 'hero-gp-kim-gwang-hyun',
+    heroName: '김광현',
+    heroClass: '마스터즈 보디빌딩 (오버롤)',
+    heroHeight: '176',
+    heroWeight: '82',
+    heroGym: '팀 아틀라스',
+    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 마스터즈 보디빌딩 오버롤 그랑프리 챔피언',
+    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799286857_Muscular_man_flexing_abs_2K_202608271143.jpeg',
+    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799278717_Muscular_man_performing_bicep_pose_202608271143.jpeg',
+    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799286857_Muscular_man_flexing_abs_2K_202608271143.jpeg',
   },
   {
     id: 'hero-gp-kim-min-kyeong',
@@ -138,7 +200,7 @@ const DEFAULT_HERO_PLAYERS = [
     heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_0eee94b4-a403-4376-bf39-1d192c790e1a/1787805097349_Female_athlete_posing_with_skate…_202608271331.jpeg',
     isMultiCrown: true,
     crownCount: 2,
-    crownBadge: '👑 2관왕'
+    crownBadge: '2관왕'
   },
   {
     id: 'hero-gp-yoo-yong-soo',
@@ -151,30 +213,6 @@ const DEFAULT_HERO_PLAYERS = [
     stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_a8fc9bfd-da91-4491-973c-e8373f727dea/1787973297495_Athlete_striking_side_chest_pose_202608291214.jpeg',
     stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_a8fc9bfd-da91-4491-973c-e8373f727dea/1787973305284_Athlete_striking_bicep_pose_202608291214.jpeg',
     heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_a8fc9bfd-da91-4491-973c-e8373f727dea/1787973297495_Athlete_striking_side_chest_pose_202608291214.jpeg',
-  },
-  {
-    id: 'hero-gp-oh-geun-seok',
-    heroName: '오근석',
-    heroClass: '남자 스포츠 모델 (오버롤)',
-    heroHeight: '175',
-    heroWeight: '',
-    heroGym: '피트니스 유 짐',
-    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 남자 스포츠 모델 오버롤 그랑프리 챔피언',
-    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961920111_Athlete_performing_side_chest_pose_202608290905.jpeg',
-    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961928630_Man_striking_bicep_pose_202608290905.jpeg',
-    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_11bdba43-b80c-4689-9d12-664d09cdda6a/1787961920111_Athlete_performing_side_chest_pose_202608290905.jpeg',
-  },
-  {
-    id: 'hero-gp-kim-gwang-hyun',
-    heroName: '김광현',
-    heroClass: '마스터즈 보디빌딩 (오버롤)',
-    heroHeight: '176',
-    heroWeight: '82',
-    heroGym: '팀 아틀라스',
-    heroTitles: '2026 제9회 용인특례시 보디빌딩대회 마스터즈 보디빌딩 오버롤 그랑프리 챔피언',
-    stagePhoto1: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799286857_Muscular_man_flexing_abs_2K_202608271143.jpeg',
-    stagePhoto2: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799278717_Muscular_man_performing_bicep_pose_202608271143.jpeg',
-    heroImageUrl: 'https://ybbf-media-worker.jbkim.workers.dev/api/photos/contest_player_e610d371-0e7f-4eac-8bc1-cc0a092e892c/1787799286857_Muscular_man_flexing_abs_2K_202608271143.jpeg',
   },
   {
     id: 'hero-gp-han-soo-man',
@@ -194,8 +232,10 @@ export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
   const { settings, fetchSettings } = useSettingsStore();
   
-  // 초기 챔피언 및 포즈 선택
-  const [selectedHeroIndex, setSelectedHeroIndex] = useState(0);
+  // 초기 챔피언 및 포즈 선택 (최초 로딩 시 강승민, 김민경, 유용수 3명 중 1/3 균등 무작위 선택)
+  const [selectedHeroIndex, setSelectedHeroIndex] = useState(() => {
+    return getPriorityHeroIndex(DEFAULT_HERO_PLAYERS);
+  });
   const [activePoseIndex, setActivePoseIndex] = useState(() => (Math.random() > 0.5 ? 1 : 0));
   const [isPaused, setIsPaused] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false); // 스크롤 진행 여부 (스크롤 시 타이머 정지)
@@ -238,16 +278,16 @@ export default function Hero() {
     }
   }, [heroPlayers]);
 
-  // D1 로드 시 일반부/클래식/비키니에 5배 가중치를 부여한 가중치 랜덤으로 초기 선택
+  // 최초 로딩 및 D1 데이터 로드 시 강승민 / 김민경 / 유용수 3명 중 1/3 균등 무작위 선정 보장
   useEffect(() => {
     if (heroPlayers.length > 0 && !isRandomized.current) {
-      const randHero = getWeightedRandomIndex(heroPlayers);
+      const randHero = getPriorityHeroIndex(heroPlayers);
       const randPose = Math.random() > 0.5 ? 1 : 0;
       setSelectedHeroIndex(randHero);
       setActivePoseIndex(randPose);
       isRandomized.current = true;
     }
-  }, [heroPlayers.length]);
+  }, [settings?.heroPlayers, heroPlayers.length]);
 
   const safeIndex = heroPlayers.length > 0 ? (selectedHeroIndex % heroPlayers.length) : 0;
   const currentHero = heroPlayers[safeIndex] || heroPlayers[0] || rawHeroPlayers[0];
@@ -308,32 +348,35 @@ export default function Hero() {
 
       // 텍스트 패럴랙스 (배경 이미지보다 빠르게 위로 올라가는 효과)
       scrollTl.fromTo(champTextRef.current,
-        { scale: 1.2, opacity: 0, filter: 'blur(25px)' },
-        { scale: 1, opacity: 0.15, filter: 'blur(0px)', duration: 0.5, ease: 'power2.out' },
+        { y: 0, opacity: 0 },
+        { y: -120, opacity: 0.15, duration: 0.4, ease: 'power1.out' },
+        0
+      );
+
+      // 프로필 컨테이너 페이드인 (선수 사진과 조화롭게 연출)
+      scrollTl.fromTo(profileContainerRef.current,
+        { autoAlpha: 0, y: 60 },
+        { autoAlpha: 1, y: 0, duration: 0.5, ease: 'power2.out' },
         0.2
       );
 
-      // 프로필 등장 (하단 네비게이션과 겹치지 않게 pb-24 확보)
-      scrollTl.fromTo(profileContainerRef.current,
-        { autoAlpha: 0 },
-        { autoAlpha: 1, duration: 0.1 },
-        0.35
-      );
-
-      statRefs.current.forEach((stat, i) => {
-        if (!stat) return;
-        scrollTl.fromTo(stat,
-          { y: 60, opacity: 0, clipPath: 'inset(100% 0% 0% 0%)' },
-          { y: 0, opacity: 1, clipPath: 'inset(0% 0% 0% 0%)', duration: 0.4, ease: 'power4.out' },
-          0.4 + i * 0.08
-        );
+      // 스탯 항목별 순차적 팝업
+      statRefs.current.forEach((el, index) => {
+        if (el) {
+          scrollTl.fromTo(el,
+            { y: 30, opacity: 0 },
+            { y: 0, opacity: 1, duration: 0.35, ease: 'back.out(1.2)' },
+            0.35 + index * 0.08
+          );
+        }
       });
+
     }, sectionRef);
 
     return () => {
       ctx.revert();
     };
-  }, []);
+  }, [selectedHeroIndex]);
 
   const handlePrevHero = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -359,124 +402,130 @@ export default function Hero() {
           color: 'var(--hero-text)'
         } as React.CSSProperties}
       >
-        {/* ═══ LAYER 0: WebGL (실시간 웨이브 + 선택된 챔피언/포즈 텍스처) ═══ */}
-        <WebGLHero imageUrl={activePhotoUrl} />
+        {/* ═══ LAYER 0: CSS 시네마틱 배경 (선택된 챔피언/포즈 이미지) ═══ */}
+        <CSSHero imageUrl={activePhotoUrl} />
 
-        {/* ═══ LAYER 1: 하단 상시 노출 네비게이션 컨트롤러 ═══ */}
+        {/* ═══ LAYER 1: 하단 상시 노출 네비게이션 컨트롤러 (모바일 친화적 2단 반응형 레이아웃) ═══ */}
         <div
           ref={bottomBarRef}
           className="absolute bottom-0 left-0 right-0 pointer-events-none"
           style={{ zIndex: 40 }}
         >
-          <div className="flex items-center justify-between px-6 md:px-14 py-5 border-t border-white/10 bg-gradient-to-t from-black/85 via-black/40 to-transparent">
+          <div className="px-3 sm:px-6 md:px-14 py-3 md:py-5 border-t border-white/10 bg-gradient-to-t from-black/95 via-black/80 to-transparent">
             
-            {/* 챔피언 & 포즈 컨트롤러 (마우스 호버 또는 스크롤 시 10초 타이머 일시정지) */}
-            <div 
-              onMouseEnter={() => setIsPaused(true)}
-              onMouseLeave={() => setIsPaused(false)}
-              className="relative overflow-hidden flex items-center justify-between gap-3 pointer-events-auto bg-black/80 backdrop-blur-md px-4 md:px-5 py-2 rounded-full border border-white/15 shadow-[0_4px_25px_rgba(0,0,0,0.6)] min-w-[300px] sm:min-w-[460px] md:min-w-[580px]"
-            >
-              {/* 10초 카운트다운 게이지 바 (스크롤 중에는 멈춤) */}
-              {isTimerActive && (
-                <div 
-                  key={timerKey}
-                  className="absolute bottom-0 left-0 h-[2px] bg-[#b4ff00] shadow-[0_0_8px_#b4ff00] animate-[heroProgress_10s_linear_forwards]"
-                  style={{ width: '100%' }}
-                />
-              )}
-
-              {/* LEFT: 뱃지 (2관왕 이상은 전용 골드 크라운 뱃지 노출) */}
-              {currentHero.isMultiCrown ? (
-                <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-yellow-500/25 via-amber-500/35 to-yellow-500/25 border border-yellow-400/80 text-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.5)] shrink-0">
-                  <Crown size={14} className="text-yellow-400 animate-pulse" />
-                  <span className="text-[11px] font-mono font-black tracking-wider uppercase">
-                    {currentHero.crownBadge || '👑 2관왕'}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5 text-yellow-400 shrink-0">
-                  <Trophy size={15} className="animate-pulse text-yellow-400" />
-                  <span className="text-[11px] font-mono font-bold tracking-wider uppercase text-yellow-400 hidden sm:inline">
-                    GRAND PRIX
-                  </span>
-                </div>
-              )}
-
-              <div className="h-3.5 w-px bg-white/20 shrink-0" />
-
-              {/* CENTER: 선수 이름 & 종목 (flex-1로 영역 고정하여 버튼 위치 불변 보장) */}
-              <div className="flex items-center gap-1.5 flex-1 min-w-0 pr-1">
-                <span className="text-xs font-black text-white tracking-wide shrink-0">
-                  {currentHero.heroName}
-                </span>
-                <span className="text-[11px] text-white/70 truncate font-medium">
-                  · {currentHero.heroClass}
-                </span>
-              </div>
-
-              {/* RIGHT: POSE 1/2 토글 + 인덱스 + 화살표 버튼 (위치 완벽 고정) */}
-              <div className="flex items-center gap-2 shrink-0">
-                {/* 📸 POSE 1 / 2 토글 버튼 */}
-                {availablePoses.length > 1 && (
-                  <div className="flex items-center gap-1 bg-white/10 p-0.5 rounded-full border border-white/15">
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActivePoseIndex(0); setTimerKey(k => k + 1); }}
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold transition-all ${
-                        activePoseIndex === 0 
-                          ? 'bg-[#b4ff00] text-black shadow-[0_0_10px_rgba(180,255,0,0.5)]' 
-                          : 'text-white/70 hover:text-white'
-                      }`}
-                      title="무대 컷 1 (Side/Chest)"
-                    >
-                      POSE 1
-                    </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setActivePoseIndex(1); setTimerKey(k => k + 1); }}
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold transition-all ${
-                        activePoseIndex === 1 
-                          ? 'bg-[#b4ff00] text-black shadow-[0_0_10px_rgba(180,255,0,0.5)]' 
-                          : 'text-white/70 hover:text-white'
-                      }`}
-                      title="무대 컷 2 (Biceps/Abs)"
-                    >
-                      POSE 2
-                    </button>
-                  </div>
+            <div className="w-full max-w-7xl mx-auto flex items-center justify-between gap-4">
+              
+              {/* 챔피언 & 포즈 컨트롤러 */}
+              <div 
+                onMouseEnter={() => setIsPaused(true)}
+                onMouseLeave={() => setIsPaused(false)}
+                className="relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-2.5 md:gap-4 pointer-events-auto bg-black/85 backdrop-blur-xl p-3 md:px-5 md:py-2.5 rounded-2xl md:rounded-full border border-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.8)] w-full md:w-auto md:min-w-[620px]"
+              >
+                {/* 10초 카운트다운 게이지 바 (스크롤 중에는 멈춤) */}
+                {isTimerActive && (
+                  <div 
+                    key={timerKey}
+                    className="absolute bottom-0 left-0 h-[2.5px] bg-[#b4ff00] shadow-[0_0_10px_#b4ff00] animate-[heroProgress_10s_linear_forwards]"
+                    style={{ width: '100%' }}
+                  />
                 )}
 
-                {/* 이전 / 다음 챔피언 넘김 */}
-                <div className="flex items-center gap-1 border-l border-white/20 pl-2">
-                  <span className="text-[10px] font-mono font-bold text-[#b4ff00] w-6 text-center">
-                    {safeIndex + 1}/{heroPlayers.length}
-                  </span>
-                  <button 
-                    onClick={handlePrevHero} 
-                    className="p-1 hover:bg-white/20 rounded-full text-white/80 hover:text-white transition-colors"
-                    title="이전 챔피언"
-                  >
-                    <ChevronLeft size={15} />
-                  </button>
-                  <button 
-                    onClick={handleNextHero} 
-                    className="p-1 hover:bg-white/20 rounded-full text-white/80 hover:text-white transition-colors"
-                    title="다음 챔피언"
-                  >
-                    <ChevronRight size={15} />
-                  </button>
-                </div>
-              </div>
-            </div>
+                {/* ── ROW 1 (모바일 상단 / 데스크탑 좌측): 뱃지 + 선수명 & 종목 ── */}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {/* 뱃지 */}
+                  {currentHero.isMultiCrown ? (
+                    <div className="flex items-center px-2.5 py-1 rounded-full bg-gradient-to-r from-yellow-500/25 via-amber-500/35 to-yellow-500/25 border border-yellow-400/80 text-yellow-300 shadow-[0_0_15px_rgba(234,179,8,0.4)] shrink-0">
+                      <span className="text-[11px] font-mono font-black tracking-wider uppercase">
+                        {currentHero.crownBadge || '2관왕'}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center px-2.5 py-1 rounded-full bg-white/10 border border-white/20 text-white/90 shrink-0">
+                      <span className="text-[11px] font-mono font-bold tracking-wider uppercase">
+                        GRAND PRIX
+                      </span>
+                    </div>
+                  )}
 
-            {/* SNS 링크 */}
-            <div className="flex items-center gap-5">
-              {['IG', 'YT', 'FB'].map(label => (
-                <span 
-                  key={label} 
-                  className="text-xs font-mono tracking-widest text-white/50 hover:text-[#b4ff00] transition-colors cursor-pointer pointer-events-auto"
-                >
-                  {label}
-                </span>
-              ))}
+                  <div className="h-3.5 w-px bg-white/20 shrink-0 hidden md:block" />
+
+                  {/* 선수 이름 & 종목 (모바일에서도 글자 잘림 없이 넉넉하게 표시) */}
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="text-sm md:text-xs font-black text-white tracking-wide shrink-0">
+                      {currentHero.heroName}
+                    </span>
+                    <span className="text-xs md:text-[11px] text-white/70 truncate font-medium">
+                      · {currentHero.heroClass}
+                    </span>
+                  </div>
+                </div>
+
+                {/* ── ROW 2 (모바일 하단 터치 컨트롤 / 데스크탑 우측 컨트롤) ── */}
+                <div className="flex items-center justify-between md:justify-end gap-3 pt-1 md:pt-0 border-t border-white/10 md:border-t-0 shrink-0">
+                  {/* 📸 POSE 1 / 2 대형 터치 토글 버튼 */}
+                  {availablePoses.length > 1 && (
+                    <div className="flex items-center gap-1 bg-white/10 p-1 rounded-xl md:rounded-full border border-white/15">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActivePoseIndex(0); setTimerKey(k => k + 1); }}
+                        className={`px-3.5 py-1.5 md:px-2.5 md:py-0.5 rounded-lg md:rounded-full text-xs md:text-[10px] font-mono font-bold transition-all active:scale-95 ${
+                          activePoseIndex === 0 
+                            ? 'bg-[#b4ff00] text-black shadow-[0_0_12px_rgba(180,255,0,0.6)] font-black' 
+                            : 'text-white/70 hover:text-white'
+                        }`}
+                        title="무대 컷 1 (Side/Chest)"
+                      >
+                        POSE 1
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setActivePoseIndex(1); setTimerKey(k => k + 1); }}
+                        className={`px-3.5 py-1.5 md:px-2.5 md:py-0.5 rounded-lg md:rounded-full text-xs md:text-[10px] font-mono font-bold transition-all active:scale-95 ${
+                          activePoseIndex === 1 
+                            ? 'bg-[#b4ff00] text-black shadow-[0_0_12px_rgba(180,255,0,0.6)] font-black' 
+                            : 'text-white/70 hover:text-white'
+                        }`}
+                        title="무대 컷 2 (Biceps/Abs)"
+                      >
+                        POSE 2
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 이전 / 다음 챔피언 넘김 (모바일 넉넉한 터치 영역) */}
+                  <div className="flex items-center gap-1.5 md:border-l md:border-white/20 md:pl-2">
+                    <span className="text-xs md:text-[10px] font-mono font-bold text-[#b4ff00] px-1 text-center">
+                      {safeIndex + 1}/{heroPlayers.length}
+                    </span>
+                    <button 
+                      onClick={handlePrevHero} 
+                      className="p-2 md:p-1.5 bg-white/10 hover:bg-white/20 active:scale-90 rounded-full text-white transition-all"
+                      title="이전 챔피언"
+                    >
+                      <ChevronLeft size={18} className="md:w-4 md:h-4" />
+                    </button>
+                    <button 
+                      onClick={handleNextHero} 
+                      className="p-2 md:p-1.5 bg-white/10 hover:bg-white/20 active:scale-90 rounded-full text-white transition-all"
+                      title="다음 챔피언"
+                    >
+                      <ChevronRight size={18} className="md:w-4 md:h-4" />
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* SNS 링크 (데스크탑에서만 노출) */}
+              <div className="hidden lg:flex items-center gap-5">
+                {['IG', 'YT', 'FB'].map(label => (
+                  <span 
+                    key={label} 
+                    className="text-xs font-mono tracking-widest text-white/50 hover:text-[#b4ff00] transition-colors cursor-pointer pointer-events-auto"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+
             </div>
           </div>
         </div>
@@ -502,11 +551,10 @@ export default function Hero() {
 
             {/* 선수 이름 + LIVE 뱃지 */}
             <div ref={el => { statRefs.current[0] = el; }} className="mb-5">
-              <div className="flex items-center gap-3 mb-2">
+              <div className="flex items-center gap-2.5 mb-2">
                 <div className="w-2.5 h-2.5 bg-red-600 rounded-full animate-pulse shadow-[0_0_12px_rgba(220,38,38,0.9)]" />
-                <p className="text-[#b4ff00] font-mono font-bold tracking-[0.35em] text-[10px] md:text-xs uppercase flex items-center gap-1.5 drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
-                  <Sparkles size={12} className="drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]" /> 
-                  {currentHero.isMultiCrown ? `👑 ${currentHero.crownCount || 2}관왕 DOUBLE GRAND PRIX CHAMPION` : 'OVERALL GRAND PRIX CHAMPION'}
+                <p className="text-[#b4ff00] font-mono font-bold tracking-[0.35em] text-[10px] md:text-xs uppercase drop-shadow-[0_2px_6px_rgba(0,0,0,0.95)]">
+                  {currentHero.isMultiCrown ? `${currentHero.crownCount || 2}관왕 DOUBLE GRAND PRIX CHAMPION` : 'OVERALL GRAND PRIX CHAMPION'}
                 </p>
               </div>
               <h2 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-display font-black italic uppercase tracking-tight text-white leading-[0.88] drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">

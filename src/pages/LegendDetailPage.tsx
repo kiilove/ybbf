@@ -3,7 +3,8 @@ import { useParams, Link, useLocation } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { legendService } from '../services/legendService';
-import LegendWebGLHero from '../components/home/LegendWebGLHero';
+import CSSLegendHero from '../components/home/CSSLegendHero';
+// import LegendWebGLHero from '../components/home/LegendWebGLHero'; // WebGL 비활성화
 import { Trophy, Medal, ArrowLeft, Crown, Heart, Sparkles, MessageCircle, Share2, Award } from 'lucide-react';
 import { useScrollToTop } from '../hooks/useScrollToTop';
 
@@ -180,8 +181,8 @@ export default function LegendDetailPage() {
       {/* ═══ SECTION 1: HERO (WebGL + Broadcast Stats) ═══ */}
       <section className="hero-section relative h-screen overflow-hidden">
         
-        {/* LAYER 0: WebGL 셰이더 */}
-        <LegendWebGLHero imageUrl={heroImg} />
+        {/* LAYER 0: CSS 시네마틱 골드 배경 */}
+        <CSSLegendHero imageUrl={heroImg} />
 
         {/* BACK BUTTON */}
         <div className="absolute top-24 left-6 md:left-16 z-50">

@@ -61,13 +61,12 @@ export default function Footer() {
 
         {/* 360 Trophy Area (Floating) */}
         <div className="md:absolute right-0 top-0 w-full md:w-[600px] h-[400px] flex justify-center items-center perspective-[1000px] pointer-events-none mb-16 md:mb-0">
-          <div className="relative w-[300px] h-[300px] md:w-[400px] md:h-[400px] flex justify-center items-center">
-            {/* Dummy trophy image - using a generic placeholder that looks tall */}
+          <div className="relative w-[300px] h-[300px] md:w-[420px] md:h-[320px] flex justify-center items-center">
             <img 
               ref={helmetImageRef}
-              src="https://picsum.photos/400/600?random=81" 
-              alt="YBBF Main Trophy" 
-              className="w-full h-full object-cover rounded-2xl border border-white/10"
+              src="/ybbf-trophies-stage.jpg" 
+              alt="YBBF 공식 대회 트로피 & 무대" 
+              className="w-full h-full object-cover rounded-2xl border border-white/20 shadow-2xl shadow-[#d2ff00]/10"
               style={{ transformStyle: 'preserve-3d' }}
             />
           </div>

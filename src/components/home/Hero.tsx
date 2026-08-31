@@ -18,48 +18,51 @@ function formatSmartHeroPlayers(rawList: any[]): any[] {
     const key = (p.heroName || '').trim();
     if (!key) return;
 
-    const rawClass = (p.heroClass || '').replace(/\(오버롤\)/g, '').replace(/그랑프리/g, '').trim();
+    const rawClass = (p.heroClass || '')
+      .replace(/\(오버롤\)/g, '')
+      .replace(/그랑프리/g, '')
+      .replace(/\(\d+관왕\)/g, '')
+      .trim();
 
     if (map.has(key)) {
       const existing = map.get(key);
-      existing.crownCount = (existing.crownCount || 1) + 1;
-      existing.isMultiCrown = true;
-      existing.crownBadge = `👑 ${existing.crownCount}관왕`;
-      if (!existing.classes) {
-        existing.classes = [existing.heroClass.replace(/\(오버롤\)/g, '').replace(/그랑프리/g, '').replace(/\(2관왕\)/g, '').trim()];
+      if (rawClass) {
+        const parts = rawClass.split(/[·&,]/).map((s: string) => s.trim()).filter(Boolean);
+        parts.forEach((part: string) => {
+          if (!existing.classes.some((c: string) => c.includes(part) || part.includes(c))) {
+            existing.classes.push(part);
+          }
+        });
       }
-      if (rawClass && !existing.classes.includes(rawClass)) {
-        existing.classes.push(rawClass);
-      }
-      existing.heroClass = `${existing.classes.join(' · ')} (${existing.crownCount}관왕)`;
-      existing.heroTitles = `2026 제9회 용인특례시 보디빌딩대회 ${existing.classes.join(' & ')} ${existing.crownCount}관왕 오버롤 그랑프리`;
+      
+      const distinctCount = Math.max(existing.classes.length, 2);
+      existing.crownCount = distinctCount;
+      existing.isMultiCrown = distinctCount >= 2;
+      existing.crownBadge = `👑 ${distinctCount}관왕`;
+      existing.heroClass = `${existing.classes.join(' · ')} (${distinctCount}관왕)`;
+      existing.heroTitles = `2026 제9회 용인특례시 보디빌딩대회 ${existing.classes.join(' & ')} ${distinctCount}관왕 오버롤 그랑프리`;
       
       if (!existing.stagePhoto2 && (p.stagePhoto1 || p.stagePhoto2 || p.heroImageUrl)) {
         existing.stagePhoto2 = p.stagePhoto2 || p.stagePhoto1 || p.heroImageUrl;
       }
     } else {
-      const isAlreadyMulti = (p.heroClass && (p.heroClass.includes('2관왕') || p.heroClass.includes('&') || p.heroClass.includes('·'))) ||
-                             (p.heroTitles && p.heroTitles.includes('2관왕')) ||
-                             (key === '김민경');
-
-      const crownCount = isAlreadyMulti ? 2 : 1;
-      const isMultiCrown = isAlreadyMulti;
-      const crownBadge = isMultiCrown ? '👑 2관왕' : 'GRAND PRIX';
-
-      let formattedClass = p.heroClass;
+      let initialClasses: string[] = [];
       if (key === '김민경') {
-        formattedClass = '비키니 · 스포츠 모델 (2관왕)';
-      } else if (isAlreadyMulti && !formattedClass.includes('2관왕')) {
-        formattedClass = `${formattedClass} (2관왕)`;
+        initialClasses = ['비키니', '여자 스포츠 모델'];
+      } else if (rawClass) {
+        initialClasses = rawClass.split(/[·&,]/).map((s: string) => s.trim()).filter(Boolean);
       }
+
+      const isMulti = initialClasses.length >= 2;
+      const count = isMulti ? initialClasses.length : 1;
 
       map.set(key, {
         ...p,
-        heroClass: formattedClass,
-        crownCount,
-        isMultiCrown,
-        crownBadge,
-        classes: [rawClass]
+        heroClass: isMulti ? `${initialClasses.join(' · ')} (${count}관왕)` : p.heroClass,
+        crownCount: count,
+        isMultiCrown: isMulti,
+        crownBadge: isMulti ? `👑 ${count}관왕` : 'GRAND PRIX',
+        classes: initialClasses.length > 0 ? initialClasses : [rawClass || '보디빌딩']
       });
     }
   });

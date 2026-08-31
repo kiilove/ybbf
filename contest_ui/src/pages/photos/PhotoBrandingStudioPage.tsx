@@ -254,7 +254,7 @@ export default function PhotoBrandingStudioPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           {currentRegistration && (
             <a
-              href={`${getMainSiteUrl()}/mypage?previewUid=${encodeURIComponent(currentRegistration.playerUid || currentRegistration.id)}`}
+              href={`${getMainSiteUrl()}/showcase/${encodeURIComponent(currentRegistration.id || currentRegistration.playerUid)}`}
               target="_blank"
               rel="noopener noreferrer"
               style={{
@@ -262,9 +262,9 @@ export default function PhotoBrandingStudioPage() {
                 alignItems: 'center',
                 gap: '6px',
                 padding: '8px 14px',
-                backgroundColor: 'rgba(59, 130, 246, 0.15)',
-                border: '1px solid rgba(59, 130, 246, 0.4)',
-                color: '#60a5fa',
+                backgroundColor: 'rgba(210, 255, 0, 0.15)',
+                border: '1px solid rgba(210, 255, 0, 0.4)',
+                color: '#d2ff00',
                 borderRadius: '10px',
                 fontSize: '12px',
                 fontWeight: 700,
@@ -272,7 +272,7 @@ export default function PhotoBrandingStudioPage() {
               }}
             >
               <ExternalLink size={14} />
-              선수 마이페이지 실시간 검수
+              공개 쇼케이스 보기
             </a>
           )}
         </div>

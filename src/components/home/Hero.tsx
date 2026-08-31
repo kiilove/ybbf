@@ -10,45 +10,73 @@ gsap.registerPlugin(ScrollTrigger);
 
 // 카테고리 우선순위 정렬 함수 (1. 일반부 -> 2. 비키니 -> 3. 클보 -> 4. 나머지)
 function getHeroCategoryRank(p: any): number {
-  const name = (p.heroName || '').trim();
-  const cls = ((p.heroClass || '') + ' ' + (p.heroTitles || '')).toLowerCase();
+  const name = (p.heroName || p.name || p.playerName || '').toLowerCase().trim();
+  const id = (p.id || '').toLowerCase();
+  const cls = ((p.heroClass || '') + ' ' + (p.heroTitles || '') + ' ' + (p.class || '') + ' ' + (p.categoryTitle || '')).toLowerCase();
 
-  // 1. 일반부 보디빌딩 (강승민 등)
+  // 1. 일반부 보디빌딩 (강승민)
   if (
     name.includes('강승민') ||
+    name.includes('kang') ||
+    id.includes('kang') ||
     cls.includes('일반부') ||
     (cls.includes('보디빌딩') && !cls.includes('클래식') && !cls.includes('마스터즈') && !cls.includes('학생부') && !cls.includes('비키니'))
   ) {
     return 1;
   }
-  // 2. 비키니 (김민경 등)
+  // 2. 비키니 (김민경)
   if (
     name.includes('김민경') ||
+    name.includes('min-kyeong') ||
+    name.includes('min-kyung') ||
+    id.includes('min-kyeong') ||
     cls.includes('비키니') ||
+    cls.includes('bikini') ||
     cls.includes('모노키니') ||
     cls.includes('여자')
   ) {
     return 2;
   }
-  // 3. 클래식 보디빌딩 (유용수 등)
+  // 3. 클래식 보디빌딩 (유용수)
   if (
     name.includes('유용수') ||
+    name.includes('yoo') ||
+    id.includes('yoo') ||
     cls.includes('클래식') ||
+    cls.includes('classic') ||
     cls.includes('클보')
   ) {
     return 3;
   }
-  // 4. 나머지 (오근석 [남자 스포츠 모델], 김광현 [마스터즈], 한수만 [마스터즈] 등)
-  if (name.includes('오근석') || cls.includes('스포츠 모델')) {
+  // 4. 나머지 - 남자 스포츠 모델 (오근석)
+  if (
+    name.includes('오근석') ||
+    name.includes('geun-seok') ||
+    id.includes('geun-seok') ||
+    id.includes('oh') ||
+    cls.includes('스포츠 모델') ||
+    cls.includes('스포츠모델') ||
+    cls.includes('sports model')
+  ) {
     return 4;
   }
-  if (name.includes('김광현')) {
+  // 5. 나머지 - 마스터즈 (김광현)
+  if (
+    name.includes('김광현') ||
+    name.includes('gwang-hyun') ||
+    id.includes('gwang-hyun')
+  ) {
     return 5;
   }
-  if (name.includes('한수만')) {
+  // 6. 나머지 - 마스터즈/학생부 (한수만)
+  if (
+    name.includes('한수만') ||
+    name.includes('soo-man') ||
+    id.includes('soo-man')
+  ) {
     return 6;
   }
-  return 7;
+  return 99;
 }
 
 // 다관왕(2관왕 이상) 스마트 통합 및 중복 챔피언 병합 함수

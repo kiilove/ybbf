@@ -860,28 +860,6 @@ export default function PhotoManagementPage() {
                                           >
                                             <ExternalLink size={12} /> 공개 쇼케이스
                                           </a>
-                                          <a
-                                            href={`${getMainSiteUrl()}/mypage?previewUid=${encodeURIComponent(reg.playerUid || reg.id)}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            style={{
-                                              fontSize: '11px',
-                                              fontWeight: 700,
-                                              backgroundColor: 'rgba(255, 255, 255, 0.06)',
-                                              color: '#93c5fd',
-                                              border: '1px solid rgba(147, 197, 253, 0.3)',
-                                              padding: '4px 9px',
-                                              borderRadius: '6px',
-                                              display: 'flex',
-                                              alignItems: 'center',
-                                              gap: '4px',
-                                              textDecoration: 'none',
-                                              transition: 'all 0.2s ease'
-                                            }}
-                                            title="선수 시점 마이페이지 새 창으로 검수"
-                                          >
-                                            <ExternalLink size={12} /> 마이페이지 뷰
-                                          </a>
 
                                           {hasPhotos ? (
                                             <span style={{

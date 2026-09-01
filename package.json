@@ -14,7 +14,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "deploy": "wrangler pages deploy dist --project-name=ybbf",
+    "deploy:admin": "wrangler pages deploy admin/dist --project-name=ybbf-admin",
+    "deploy:hub": "wrangler pages deploy contest_ui/dist --project-name=ybbf-hub",
+    "deploy:api": "wrangler deploy --config workers/api/wrangler.jsonc",
+    "deploy:all": "npm run build && npm run deploy && npm --prefix admin run build && npm run deploy:admin && npm --prefix contest_ui run build && npm run deploy:hub && npm run deploy:api"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

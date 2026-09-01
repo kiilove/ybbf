@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { ArrowRight } from 'lucide-react';
@@ -63,10 +64,10 @@ export default function StoreSection() {
             YBBF 공식 굿즈, 트레이닝 기어, 파트너 로고웨어. 무대의 영광을 일상으로 가져오세요.
           </p>
           <div className="store-reveal mt-4">
-            <a href="/store" className="inline-flex items-center justify-between gap-4 p-4 px-8 border border-accent bg-transparent hover:bg-accent hover:text-black transition-colors cursor-grow rounded-2xl">
+            <Link to="/store" className="inline-flex items-center justify-between gap-4 p-4 px-8 border border-accent bg-transparent hover:bg-accent hover:text-black transition-colors cursor-grow rounded-2xl">
               <span className="text-xs font-black tracking-widest uppercase">스토어 둘러보기</span>
               <ArrowRight className="w-5 h-5" />
-            </a>
+            </Link>
           </div>
         </div>
 

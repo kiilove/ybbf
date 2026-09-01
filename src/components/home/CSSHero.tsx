@@ -27,8 +27,13 @@ export default function CSSHero({ imageUrl }: CSSHeroProps) {
         className="absolute inset-0 w-full h-full object-cover object-top transition-opacity duration-300"
         loading="eager"
         decoding="async"
+        crossOrigin="anonymous"
+        fetchPriority="high"
         onError={(e) => {
-          (e.currentTarget as HTMLImageElement).src = DEFAULT_BASE_IMAGE;
+          const el = e.currentTarget as HTMLImageElement;
+          if (el.src !== DEFAULT_BASE_IMAGE) {
+            el.src = DEFAULT_BASE_IMAGE;
+          }
         }}
       />
 
@@ -71,7 +76,7 @@ export default function CSSHero({ imageUrl }: CSSHeroProps) {
           zIndex: 3,
           mixBlendMode: 'screen',
           animation: 'cssHeroAmbient 8s ease-in-out infinite alternate',
-          willChange: 'opacity',
+          willChange: 'transform, opacity',
         }}
       />
 

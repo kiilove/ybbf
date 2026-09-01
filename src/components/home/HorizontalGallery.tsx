@@ -98,16 +98,16 @@ export default function HorizontalGallery() {
             <p className="font-sans text-text-muted leading-relaxed mb-8">
               용인시 보디빌딩협회의 공식 미디어 센터입니다. <br/>대회 하이라이트, 인터뷰, 훈련 영상 등을 가장 먼저 만나보세요.
             </p>
-            <a href="/media" className="inline-flex items-center gap-2 text-accent font-bold uppercase tracking-widest hover:text-white transition-colors w-max">
+            <Link to="/media" className="inline-flex items-center gap-2 text-accent font-bold uppercase tracking-widest hover:text-white transition-colors w-max">
               미디어 센터 가기 →
-            </a>
+            </Link>
           </div>
 
           {/* Media Cards */}
           {latestMedia.map((media) => (
-            <a 
+            <Link 
               key={media.id} 
-              href="/media"
+              to="/media"
               className="gallery-card group block relative md:h-[60vh] shrink-0 overflow-hidden w-full md:w-[450px] mt-8 md:mt-0 rounded-lg"
             >
               <div className="absolute top-4 left-4 z-20">
@@ -139,7 +139,7 @@ export default function HorizontalGallery() {
                 </h3>
                 <p className="font-mono text-[10px] tracking-widest text-text-muted mt-2">{media.date}</p>
               </div>
-            </a>
+            </Link>
           ))}
         </div>
       </section>

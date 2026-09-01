@@ -11,6 +11,7 @@ export default function LegendHighlight() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [winners, setWinners] = useState<ChampionWinner[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -55,13 +56,14 @@ export default function LegendHighlight() {
     return () => ctx.revert();
   }, []);
 
-  // 6초 자동 회전
+  // 6초 자동 회전 (마우스 호버 또는 터치 시 정지)
   useEffect(() => {
+    if (isPaused || winners.length <= 1) return;
     const timer = setInterval(() => {
       setCurrentIndex(prev => (prev < winners.length - 1 ? prev + 1 : 0));
     }, 6000);
     return () => clearInterval(timer);
-  }, [winners.length]);
+  }, [winners.length, isPaused]);
 
   return (
     <div ref={containerRef} className="bg-[#030305] text-white relative overflow-hidden border-t border-white/5">
@@ -97,22 +99,24 @@ export default function LegendHighlight() {
             {/* 미니 챔피언 셀렉터 버튼 */}
             <div className="flex items-center gap-3 mb-10 bg-black/40 border border-white/10 rounded-full p-1.5 backdrop-blur-md">
               <span className="text-xs font-mono text-white/60 px-3 font-bold">
-                WINNER {currentIndex + 1} / {winners.length}
+                WINNER {currentIndex + 1} / {Math.max(1, winners.length)}
               </span>
               <div className="flex gap-1">
                 <button
+                  type="button"
+                  aria-label="이전 우승자"
                   onClick={() => setCurrentIndex(prev => (prev > 0 ? prev - 1 : winners.length - 1))}
-                  className="p-2 rounded-full bg-white/10 hover:bg-[#b4ff00] hover:text-black transition-colors"
-                  title="이전 우승자"
+                  className="min-w-[36px] min-h-[36px] flex items-center justify-center p-2 rounded-full bg-white/10 hover:bg-[#b4ff00] hover:text-black transition-colors"
                 >
-                  <ChevronLeft size={14} />
+                  <ChevronLeft size={14} aria-hidden="true" />
                 </button>
                 <button
+                  type="button"
+                  aria-label="다음 우승자"
                   onClick={() => setCurrentIndex(prev => (prev < winners.length - 1 ? prev + 1 : 0))}
-                  className="p-2 rounded-full bg-white/10 hover:bg-[#b4ff00] hover:text-black transition-colors"
-                  title="다음 우승자"
+                  className="min-w-[36px] min-h-[36px] flex items-center justify-center p-2 rounded-full bg-white/10 hover:bg-[#b4ff00] hover:text-black transition-colors"
                 >
-                  <ChevronRight size={14} />
+                  <ChevronRight size={14} aria-hidden="true" />
                 </button>
               </div>
             </div>
@@ -127,8 +131,13 @@ export default function LegendHighlight() {
           </div>
 
           {/* ═══ RIGHT COLUMN: 2026 챔피언 실물 무대 스포트라이트 카드 ═══ */}
-          <div className="lg:col-span-6 w-full relative flex justify-center">
-            
+          <div 
+            className="lg:col-span-6 w-full relative flex justify-center"
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+            onTouchStart={() => setIsPaused(true)}
+            onTouchEnd={() => setIsPaused(false)}
+          >
             <div className="w-full max-w-[480px] aspect-[3/4] relative rounded-3xl overflow-hidden bg-gradient-to-b from-white/10 to-black/80 border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,0.8)] group">
               
               {/* 우승자 무대 사진 */}

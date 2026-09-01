@@ -1,4 +1,4 @@
-import { doc, getDoc, collection, setDoc, query, where, getDocs, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, setDoc, updateDoc, increment, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { 
   ContestNotice, 
@@ -8,6 +8,8 @@ import {
   RegistrationPayload, 
   MandatoryNotice 
 } from '../types/registration';
+
+const D1_WORKER_URL = import.meta.env.VITE_API_WORKER_URL || 'https://ybbf-api-worker.jbkim.workers.dev';
 
 // 💡 날짜 안전 파서 (ISO 8601 UTC 및 로컬 YYYY-MM-DD HH:mm:ss 타임존 보정 파싱)
 export function parseSafeDate(isoStr?: string, localStr?: string): number {
@@ -362,7 +364,7 @@ export async function getInvoiceByIdOrPlayerUid(idOrUid: string): Promise<Regist
 
   // 0) Cloudflare D1 공식 인보이스 및 공식 심사 결과 조회 (실시간 성적 & 사진)
   try {
-    const res = await fetch(`https://ybbf-api-worker.jbkim.workers.dev/api/invoices/showcase/${encodeURIComponent(idOrUid)}`);
+    const res = await fetch(`${D1_WORKER_URL}/api/invoices/showcase/${encodeURIComponent(idOrUid)}`);
     if (res.ok) {
       const json = await res.json();
       if (json.success && json.invoice) {
@@ -494,7 +496,7 @@ export interface ShowcaseComment {
   likeCount?: number;
 }
 
-// 8-1. 쇼케이스 리액션 인터랙션 (하트, 불꽃, 박수, 트로피)
+// 8-1. 쇼케이스 리액션 인터랙션 (하트, 불꽃, 박수, 트로피 - 원자적 increment 적용)
 export async function reactShowcase(
   invoiceId: string, 
   reaction: ShowcaseReactionType
@@ -511,16 +513,30 @@ export async function reactShowcase(
 
   try {
     const docRef = doc(db, 'invoices_pool', invoiceId);
+    const updates: Record<string, any> = {
+      [`reactions.${reaction}`]: increment(1)
+    };
+    if (reaction === 'heart') {
+      updates.cheerCount = increment(1);
+    }
+    await updateDoc(docRef, updates);
+
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const data = snap.data();
-      const firestoreReactions = data.reactions || { heart: data.cheerCount || 0, fire: 0, clap: 0, trophy: 0 };
-      firestoreReactions[reaction] = (firestoreReactions[reaction] || 0) + 1;
-      await setDoc(docRef, { reactions: firestoreReactions, cheerCount: firestoreReactions.heart }, { merge: true });
-      return firestoreReactions;
+      return data.reactions || currentReactions;
     }
   } catch (e) {
-    console.warn('Firestore reaction update error:', e);
+    // 만약 문서가 없거나 reactions 필드가 미초기화된 경우 fallback
+    try {
+      const docRef = doc(db, 'invoices_pool', invoiceId);
+      await setDoc(docRef, { 
+        reactions: currentReactions, 
+        cheerCount: currentReactions.heart 
+      }, { merge: true });
+    } catch (err) {
+      console.warn('Firestore reaction fallback update error:', err);
+    }
   }
 
   return currentReactions;

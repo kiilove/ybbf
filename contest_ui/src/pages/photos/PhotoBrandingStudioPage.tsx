@@ -107,12 +107,9 @@ export default function PhotoBrandingStudioPage() {
       const playerIdentifier = currentRegistration.playerUid || currentRegistration.playerTel || currentRegistration.id;
       const folderKey = `contest_player_${playerIdentifier}_public_s${selectedSlot}`;
       
-      // 🗑️ 기존 해당 슬롯에 이미 가공본이 있었다면 R2 버킷에서 먼저 삭제
       const oldSlotPhoto = selectedSlot === 1 ? currentRegistration.publicStagePhoto1 : currentRegistration.publicStagePhoto2;
-      if (oldSlotPhoto && oldSlotPhoto !== currentSlotPhotoUrl) {
-        await deleteFromR2(oldSlotPhoto);
-      }
 
+      // 🛡️ 새 가공 사진을 R2에 먼저 안전하게 업로드 (기존 사진 선삭제 방지)
       const uploadedR2Url = await uploadToR2(file, folderKey, true);
       if (!uploadedR2Url) {
         throw new Error('R2 서버에서 반환된 이미지 URL이 없습니다.');
@@ -143,7 +140,17 @@ export default function PhotoBrandingStudioPage() {
         publicPhotoUrls: currentPublicPhotos,
       };
 
+      // 💾 DB에 먼저 성공적으로 저장
       await contestService.saveRegistration(updatedReg);
+
+      // 🗑️ DB 저장까지 완전히 성공한 후 이전 구버전 사진 정리
+      if (oldSlotPhoto && oldSlotPhoto !== uploadedR2Url && oldSlotPhoto !== currentSlotPhotoUrl) {
+        try {
+          await deleteFromR2(oldSlotPhoto);
+        } catch (delErr) {
+          console.warn('구버전 사진 삭제 예외 무시:', delErr);
+        }
+      }
 
       setCurrentRegistration(updatedReg);
       setSaveSuccessMsg(`🎉 무대 ${selectedSlot}번 사진이 'ybbf.org 공개용'으로 성공적으로 발행되었습니다!`);
@@ -350,7 +357,7 @@ export default function PhotoBrandingStudioPage() {
                 position: 'relative'
               }}>
                 {slot1Url ? (
-                  <img src={slot1Url} alt="무대 1번" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={slot1Url} alt="무대 1번" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#6b7280' }}>미등록</div>
                 )}
@@ -429,7 +436,7 @@ export default function PhotoBrandingStudioPage() {
                 position: 'relative'
               }}>
                 {slot2Url ? (
-                  <img src={slot2Url} alt="무대 2번" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={slot2Url} alt="무대 2번" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: '#6b7280' }}>미등록</div>
                 )}

@@ -24,6 +24,7 @@ export default function HeroPlayerForm({
     }
     return {
       id: `player-${crypto.randomUUID()}`,
+      orderIndex: 1,
       heroName: '',
       heroClass: '',
       heroHeight: '',
@@ -31,6 +32,11 @@ export default function HeroPlayerForm({
       heroGym: '용인시 보디빌딩협회',
       heroTitles: '',
       heroImageUrl: '',
+      stagePhoto1: '',
+      stagePhoto2: '',
+      isMultiCrown: false,
+      crownCount: 1,
+      crownBadge: '',
       heroInstagram: '',
       heroYoutube: '',
       heroFacebook: ''
@@ -41,8 +47,18 @@ export default function HeroPlayerForm({
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    const { name, value, type } = e.target;
+    if (type === 'checkbox') {
+      const checked = (e.target as HTMLInputElement).checked;
+      setFormData(prev => ({ 
+        ...prev, 
+        [name]: checked,
+        crownCount: checked ? (prev.crownCount && prev.crownCount >= 2 ? prev.crownCount : 2) : 1,
+        crownBadge: checked ? (prev.crownBadge || '2관왕') : ''
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,26 +101,40 @@ export default function HeroPlayerForm({
         {/* 인적 스펙 구성 (그룹분할선 사용, 카드 중첩 없음) */}
         <h3 className="form-section-title">선수 기본 인적 스펙</h3>
         <div className="form-grid">
-          <div className="form-group col-6">
-            <label className="form-label">선수 성명 (영문)</label>
+          <div className="form-group col-4">
+            <label className="form-label">노출 순위 (Order)</label>
+            <input
+              type="number"
+              name="orderIndex"
+              min="1"
+              className="form-control"
+              placeholder="예: 1"
+              value={formData.orderIndex || 1}
+              onChange={handleChange}
+            />
+            <span className="form-helper">1번에 가까울수록 메인에 우선 노출됩니다.</span>
+          </div>
+
+          <div className="form-group col-4">
+            <label className="form-label">선수 성명</label>
             <input
               type="text"
               name="heroName"
               className="form-control"
-              placeholder="예: KIM CHAMPION"
+              placeholder="예: 강승민"
               value={formData.heroName}
               onChange={handleChange}
               required
             />
           </div>
 
-          <div className="form-group col-6">
-            <label className="form-label">출전 체급 (Class)</label>
+          <div className="form-group col-4">
+            <label className="form-label">출전 체급 / 대표 종목</label>
             <input
               type="text"
               name="heroClass"
               className="form-control"
-              placeholder="예: CLASSIC PHYSIQUE"
+              placeholder="예: 일반부 보디빌딩 (오버롤)"
               value={formData.heroClass}
               onChange={handleChange}
               required
@@ -149,6 +179,73 @@ export default function HeroPlayerForm({
               required
             />
           </div>
+        </div>
+
+        {/* 🏆 다관왕(2관왕/3관왕) 설정 영역 */}
+        <h3 className="form-section-title" style={{ marginTop: '32px' }}>👑 다관왕 (복수 종목 우승) 설정</h3>
+        <div style={{
+          backgroundColor: formData.isMultiCrown ? '#faf5ff' : '#f8fafc',
+          border: formData.isMultiCrown ? '1px solid #d8b4fe' : '1px solid #e2e8f0',
+          padding: '16px 20px',
+          borderRadius: '10px',
+          marginBottom: '24px',
+          transition: 'all 0.2s ease'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: formData.isMultiCrown ? '16px' : '0' }}>
+            <input
+              type="checkbox"
+              id="isMultiCrown"
+              name="isMultiCrown"
+              checked={Boolean(formData.isMultiCrown)}
+              onChange={handleChange}
+              style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+            />
+            <label htmlFor="isMultiCrown" style={{ fontWeight: 700, fontSize: '14px', cursor: 'pointer', color: formData.isMultiCrown ? '#6b21a8' : '#334155' }}>
+              이 선수를 '다관왕(복수 그랑프리)'으로 지정합니다 (예: 비키니 + 여자 스포츠 모델 2관왕)
+            </label>
+          </div>
+
+          {formData.isMultiCrown && (
+            <div className="form-grid" style={{ marginTop: '12px' }}>
+              <div className="form-group col-4">
+                <label className="form-label">관왕 수 (Crown Count)</label>
+                <input
+                  type="number"
+                  name="crownCount"
+                  min="2"
+                  max="5"
+                  className="form-control"
+                  placeholder="예: 2"
+                  value={formData.crownCount || 2}
+                  onChange={handleChange}
+                />
+              </div>
+
+              <div className="form-group col-4">
+                <label className="form-label">노출 뱃지 문구</label>
+                <input
+                  type="text"
+                  name="crownBadge"
+                  className="form-control"
+                  placeholder="예: 2관왕"
+                  value={formData.crownBadge || '2관왕'}
+                  onChange={handleChange}
+                />
+              </div>
+
+              <div className="form-group col-4">
+                <label className="form-label">2번 종목 무대 사진 URL (선택)</label>
+                <input
+                  type="text"
+                  name="stagePhoto2"
+                  className="form-control"
+                  placeholder="https://... 또는 /photos/..."
+                  value={formData.stagePhoto2 || ''}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 프로필 이미지 업로드 영역 */}

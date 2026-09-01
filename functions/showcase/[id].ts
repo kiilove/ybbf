@@ -4,7 +4,7 @@ interface Env {
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const { params, request } = context;
-  const idOrName = (params.id || (Array.isArray(params.path) ? params.path[0] : params.path) || '') as string;
+  const idOrName = (params.id || '') as string;
 
   // 1. 기본 정적 HTML 가져오기
   const response = await context.env.ASSETS.fetch(request);

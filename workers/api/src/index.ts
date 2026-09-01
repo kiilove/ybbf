@@ -43,12 +43,31 @@ app.use(
   })
 );
 
+function safeJsonParse<T = any>(val: any, fallback: T): T {
+  if (!val) return fallback;
+  if (typeof val !== 'string') return val as T;
+  try {
+    return JSON.parse(val) as T;
+  } catch (err) {
+    return fallback;
+  }
+}
+
 let dbInitialized = false;
 
 async function ensureTables(db: D1Database) {
   if (dbInitialized) return;
 
   await db.batch([
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        uid TEXT PRIMARY KEY,
+        nickname TEXT,
+        profilePhotoUrl TEXT,
+        createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `),
     db.prepare(`
       CREATE TABLE IF NOT EXISTS notification_subscriptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1305,7 +1324,7 @@ app.get('/api/landing/sections', async (c) => {
     const result = await c.env.DB.prepare(query).bind(...params).all();
     const list = (result.results || []).map(item => ({
       ...item,
-      extraData: item.extraData ? JSON.parse(item.extraData as string) : null
+      extraData: safeJsonParse(item.extraData, null)
     }));
     return c.json(list);
   } catch (err: any) {
@@ -1519,7 +1538,7 @@ app.get('/api/legends', async (c) => {
       
       return {
         ...legend,
-        mediaIds: legend.mediaIds ? JSON.parse(legend.mediaIds as string) : [],
+        mediaIds: safeJsonParse(legend.mediaIds, []),
         titles,
         gallery
       };
@@ -2838,7 +2857,7 @@ app.get('/api/contest/registrations', contestMiddleware, async (c) => {
 
       return {
         ...item,
-        joins: item.joins ? JSON.parse(item.joins as string) : [],
+        joins: safeJsonParse(item.joins, []),
         playerPhotoUrls,
         photos: playerPhotoUrls,
         selectedPhotoUrls: [stagePhoto1, stagePhoto2],

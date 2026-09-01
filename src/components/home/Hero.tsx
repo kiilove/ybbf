@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import CSSHero from './CSSHero';
@@ -8,140 +8,103 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 gsap.registerPlugin(ScrollTrigger);
 
-// 카테고리 우선순위 정렬 함수 (1. 일반부 -> 2. 비키니 -> 3. 클보 -> 4. 나머지)
-function getHeroCategoryRank(p: any): number {
-  const name = (p.heroName || p.name || p.playerName || '').toLowerCase().trim();
-  const id = (p.id || '').toLowerCase();
-  const cls = ((p.heroClass || '') + ' ' + (p.heroTitles || '') + ' ' + (p.class || '') + ' ' + (p.categoryTitle || '')).toLowerCase();
-
-  // 1. 일반부 보디빌딩 (강승민)
-  if (
-    name.includes('강승민') ||
-    name.includes('kang') ||
-    id.includes('kang') ||
-    cls.includes('일반부') ||
-    (cls.includes('보디빌딩') && !cls.includes('클래식') && !cls.includes('마스터즈') && !cls.includes('학생부') && !cls.includes('비키니'))
-  ) {
-    return 1;
-  }
-  // 2. 비키니 (김민경)
-  if (
-    name.includes('김민경') ||
-    name.includes('min-kyeong') ||
-    name.includes('min-kyung') ||
-    id.includes('min-kyeong') ||
-    cls.includes('비키니') ||
-    cls.includes('bikini') ||
-    cls.includes('모노키니') ||
-    cls.includes('여자')
-  ) {
-    return 2;
-  }
-  // 3. 클래식 보디빌딩 (유용수)
-  if (
-    name.includes('유용수') ||
-    name.includes('yoo') ||
-    id.includes('yoo') ||
-    cls.includes('클래식') ||
-    cls.includes('classic') ||
-    cls.includes('클보')
-  ) {
-    return 3;
-  }
-  // 4. 나머지 - 남자 스포츠 모델 (오근석)
-  if (
-    name.includes('오근석') ||
-    name.includes('geun-seok') ||
-    id.includes('geun-seok') ||
-    id.includes('oh') ||
-    cls.includes('스포츠 모델') ||
-    cls.includes('스포츠모델') ||
-    cls.includes('sports model')
-  ) {
-    return 4;
-  }
-  // 5. 나머지 - 마스터즈 (김광현)
-  if (
-    name.includes('김광현') ||
-    name.includes('gwang-hyun') ||
-    id.includes('gwang-hyun')
-  ) {
-    return 5;
-  }
-  // 6. 나머지 - 마스터즈/학생부 (한수만)
-  if (
-    name.includes('한수만') ||
-    name.includes('soo-man') ||
-    id.includes('soo-man')
-  ) {
-    return 6;
-  }
-  return 99;
+export interface HeroPlayerItem {
+  id: string;
+  heroName: string;
+  heroClass: string;
+  heroHeight?: string;
+  heroWeight?: string;
+  heroGym?: string;
+  heroTitles: string;
+  stagePhoto1?: string;
+  stagePhoto2?: string;
+  heroImageUrl: string;
+  isMultiCrown?: boolean;
+  crownCount?: number;
+  crownBadge?: string;
+  classes?: string[];
+  orderIndex?: number;
 }
 
-// 다관왕(2관왕 이상) 스마트 통합 및 중복 챔피언 병합 함수
-function formatSmartHeroPlayers(rawList: any[]): any[] {
-  const map = new Map<string, any>();
+// 다관왕(2관왕 이상) 스마트 통합 및 어드민(4500번) 지정 노출 순서 100% 반영 함수
+function formatSmartHeroPlayers(rawList: any[]): HeroPlayerItem[] {
+  if (!rawList || rawList.length === 0) return [];
 
-  rawList.forEach((p) => {
-    if (!p.heroImageUrl || p.heroImageUrl.includes('default-player-1')) return;
-    if (p.heroName && (p.heroName.includes('김민균') || p.heroName.includes('KIM MIN-KYUN'))) return;
+  const map = new Map<string, HeroPlayerItem>();
+  const orderIndices = new Map<string, number>();
 
-    const key = (p.heroName || '').trim();
+  rawList.forEach((p, idx) => {
+    const key = (p.heroName || p.name || '').trim();
     if (!key) return;
 
+    if (!orderIndices.has(key)) {
+      orderIndices.set(key, p.orderIndex !== undefined ? p.orderIndex : idx);
+    }
+
+    const photo = p.heroImageUrl || p.stagePhoto1 || p.stagePhoto2 || '';
     const rawClass = (p.heroClass || '')
       .replace(/\(오버롤\)/g, '')
       .replace(/그랑프리/g, '')
       .replace(/\(\d+관왕\)/g, '')
       .trim();
 
+    const parsedClasses = rawClass 
+      ? rawClass.split(/[·&,]/).map((s: string) => s.trim()).filter(Boolean) 
+      : [];
+
     if (map.has(key)) {
-      const existing = map.get(key);
-      if (rawClass) {
-        const parts = rawClass.split(/[·&,]/).map((s: string) => s.trim()).filter(Boolean);
-        parts.forEach((part: string) => {
-          if (!existing.classes.some((c: string) => c.includes(part) || part.includes(c))) {
-            existing.classes.push(part);
+      const existing = map.get(key)!;
+      if (parsedClasses.length > 0) {
+        parsedClasses.forEach((part: string) => {
+          if (!existing.classes?.some((c: string) => c.includes(part) || part.includes(c))) {
+            existing.classes?.push(part);
           }
         });
       }
       
-      const distinctCount = Math.max(existing.classes.length, 2);
+      const distinctCount = p.crownCount || existing.classes?.length || 1;
       existing.crownCount = distinctCount;
-      existing.isMultiCrown = distinctCount >= 2;
-      existing.crownBadge = `${distinctCount}관왕`;
-      existing.heroClass = `${existing.classes.join(' · ')} (${distinctCount}관왕)`;
-      existing.heroTitles = `2026 제9회 용인특례시 보디빌딩대회 ${existing.classes.join(' & ')} ${distinctCount}관왕 오버롤 그랑프리`;
+      existing.isMultiCrown = p.isMultiCrown !== undefined ? p.isMultiCrown : (distinctCount >= 2);
+      existing.crownBadge = p.crownBadge || (distinctCount >= 2 ? `${distinctCount}관왕` : '');
+      existing.heroClass = p.heroClass || (distinctCount >= 2 ? `${existing.classes?.join(' · ')} (${distinctCount}관왕)` : (existing.classes?.join(' · ') || rawClass));
+      existing.heroTitles = p.heroTitles || `2026 제9회 용인특례시 보디빌딩대회 ${existing.classes?.join(' & ')}${distinctCount >= 2 ? ` ${distinctCount}관왕` : ''} 오버롤 그랑프리`;
       
-      if (!existing.stagePhoto2 && (p.stagePhoto1 || p.stagePhoto2 || p.heroImageUrl)) {
-        existing.stagePhoto2 = p.stagePhoto2 || p.stagePhoto1 || p.heroImageUrl;
+      const candidatePhoto = p.stagePhoto2 || p.stagePhoto1 || photo;
+      if (!existing.stagePhoto2 && candidatePhoto && candidatePhoto !== existing.stagePhoto1) {
+        existing.stagePhoto2 = candidatePhoto;
       }
     } else {
-      let initialClasses: string[] = [];
-      if (key === '김민경') {
-        initialClasses = ['비키니', '여자 스포츠 모델'];
-      } else if (rawClass) {
-        initialClasses = rawClass.split(/[·&,]/).map((s: string) => s.trim()).filter(Boolean);
+      let initialClasses: string[] = p.classes ? [...p.classes] : [];
+      if (initialClasses.length === 0 && parsedClasses.length > 0) {
+        initialClasses = [...parsedClasses];
       }
 
-      const isMulti = initialClasses.length >= 2;
-      const count = isMulti ? initialClasses.length : 1;
+      const isMulti = p.isMultiCrown !== undefined ? p.isMultiCrown : (initialClasses.length >= 2 || (p.crownCount && p.crownCount >= 2));
+      const count = p.crownCount || (isMulti ? initialClasses.length : 1);
 
       map.set(key, {
         ...p,
-        heroClass: isMulti ? `${initialClasses.join(' · ')} (${count}관왕)` : p.heroClass,
+        heroImageUrl: photo || p.heroImageUrl || 'https://ybbf.org/hero_section.png',
+        stagePhoto1: p.stagePhoto1 || photo || p.heroImageUrl || '',
+        stagePhoto2: p.stagePhoto2 || '',
+        heroClass: p.heroClass || (isMulti ? `${initialClasses.join(' · ')} (${count}관왕)` : (rawClass || '보디빌딩')),
         crownCount: count,
         isMultiCrown: isMulti,
-        crownBadge: isMulti ? `${count}관왕` : 'GRAND PRIX',
+        crownBadge: p.crownBadge || (isMulti ? `${count}관왕` : 'GRAND PRIX'),
         classes: initialClasses.length > 0 ? initialClasses : [rawClass || '보디빌딩']
       });
     }
   });
 
   const list = Array.from(map.values());
-  // 1. 일반부 -> 2. 비키니 -> 3. 클보 -> 4. 나머지 순 정렬
-  return list.sort((a, b) => getHeroCategoryRank(a) - getHeroCategoryRank(b));
+  // 어드민에서 지정한 orderIndex 및 원본 배열 순서를 100% 최우선 반영하여 정렬
+  return list.sort((a, b) => {
+    const keyA = (a.heroName || '').trim();
+    const keyB = (b.heroName || '').trim();
+    const idxA = orderIndices.has(keyA) ? orderIndices.get(keyA)! : 999;
+    const idxB = orderIndices.has(keyB) ? orderIndices.get(keyB)! : 999;
+    return idxA - idxB;
+  });
 }
 
 // 1. 일반부 -> 2. 비키니 -> 3. 클보 -> 4. 나머지 순서로 정의된 기본 챔피언 데이터셋
@@ -225,7 +188,10 @@ const DEFAULT_HERO_PLAYERS = [
 
 export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
-  const { settings, fetchSettings } = useSettingsStore();
+  
+  // Zustand Selector 적용으로 불필요한 전체 리렌더링 방지
+  const heroPlayersSettings = useSettingsStore((state) => state.settings?.heroPlayers);
+  const fetchSettings = useSettingsStore((state) => state.fetchSettings);
   
   // 1번(일반부 강승민)부터 순차적으로 시작
   const [selectedHeroIndex, setSelectedHeroIndex] = useState(0);
@@ -233,7 +199,10 @@ export default function Hero() {
   const [isPaused, setIsPaused] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false); // 스크롤 진행 여부 (스크롤 시 타이머 정지)
   const [timerKey, setTimerKey] = useState(0); // 10초 타이머 리셋용 키
-  const isRandomized = useRef(false);
+
+  // 모바일 터치 스와이프 좌표 ref
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
 
   // 초기 화면 요소
   const bottomBarRef = useRef<HTMLDivElement>(null);
@@ -247,18 +216,24 @@ export default function Hero() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const rawHeroPlayers = (settings?.heroPlayers && settings.heroPlayers.length > 0) 
-    ? settings.heroPlayers 
-    : DEFAULT_HERO_PLAYERS;
+  // 챔피언 목록 메모이제이션 (비동기 설정 수신 시 불필요한 배열 재생성 방지)
+  const heroPlayers = useMemo(() => {
+    const raw = (heroPlayersSettings && heroPlayersSettings.length > 0) 
+      ? heroPlayersSettings 
+      : DEFAULT_HERO_PLAYERS;
+    return formatSmartHeroPlayers(raw);
+  }, [heroPlayersSettings]);
 
-  // 스마트 다관왕 통합 및 사진 있는 유효 챔피언 선별
-  const heroPlayers = formatSmartHeroPlayers(rawHeroPlayers);
+  const heroPlayersRef = useRef(heroPlayers);
+  useEffect(() => {
+    heroPlayersRef.current = heroPlayers;
+  }, [heroPlayers]);
 
   // ⚡ 모든 챔피언 사진 브라우저 및 GPU 메모리 선행 프리로드 (롤링/전환 시 0ms 즉시 노출)
   useEffect(() => {
     if (heroPlayers.length > 0) {
       heroPlayers.forEach((player) => {
-        const urls = [player.stagePhoto1, player.stagePhoto2, player.heroImageUrl].filter(Boolean);
+        const urls = [player.stagePhoto1, player.stagePhoto2, player.heroImageUrl].filter(Boolean) as string[];
         urls.forEach((url) => {
           const img = new Image();
           img.crossOrigin = 'anonymous';
@@ -272,31 +247,34 @@ export default function Hero() {
   }, [heroPlayers]);
 
   const safeIndex = heroPlayers.length > 0 ? (selectedHeroIndex % heroPlayers.length) : 0;
-  const currentHero = heroPlayers[safeIndex] || heroPlayers[0] || rawHeroPlayers[0];
+  const currentHero = heroPlayers[safeIndex] || heroPlayers[0] || DEFAULT_HERO_PLAYERS[0];
 
   // 현재 선수의 포즈 사진 목록
   const availablePoses = [
     currentHero.stagePhoto1 || currentHero.heroImageUrl,
     currentHero.stagePhoto2
-  ].filter(Boolean);
+  ].filter(Boolean) as string[];
 
   const activePhotoUrl = availablePoses[activePoseIndex] || availablePoses[0] || currentHero.heroImageUrl;
 
-  /* ═══ ⏱️ 10초 간격 자동 챔피언 롤링 (일반부 -> 비키니 -> 클보 -> 나머지 순환) ═══ */
+  /* ═══ ⏱️ 10초 간격 연속 챔피언 롤링 ═══ */
   const isTimerActive = !isPaused && !isScrolled && heroPlayers.length > 1;
 
   useEffect(() => {
     if (!isTimerActive) return;
 
     const interval = setInterval(() => {
-      setSelectedHeroIndex((prev) => (prev + 1) % heroPlayers.length);
-      setActivePoseIndex((prev) => (prev === 0 ? 1 : 0));
+      const currentList = heroPlayersRef.current;
+      if (currentList.length <= 1) return;
+      setSelectedHeroIndex((prev) => (prev + 1) % currentList.length);
+      setActivePoseIndex(0); // 챔피언 변경 시 포즈 0(기본 컷)으로 리셋
       setTimerKey((k) => k + 1);
     }, 10000);
 
     return () => clearInterval(interval);
-  }, [isTimerActive, heroPlayers.length, timerKey]);
+  }, [isTimerActive, timerKey]);
 
+  /* ═══ 🎬 GSAP 타임라인 (마운트 시 1회만 초기화하여 ScrollTrigger 파괴 방지) ═══ */
   useEffect(() => {
     if (!sectionRef.current) return;
 
@@ -318,24 +296,24 @@ export default function Hero() {
           pin: true,
           scrub: 1,
           onUpdate: (self) => {
-            // 스크롤이 시작되면(progress > 0.01) 타이머 즉시 정지
-            setIsScrolled(self.progress > 0.01);
+            // 스크롤 시작 시 타이머 정지 (상태 변경 시에만 setState 호출)
+            const isNowScrolled = self.progress > 0.01;
+            setIsScrolled((prev) => (prev !== isNowScrolled ? isNowScrolled : prev));
           },
           onLeaveBack: () => {
-            // 맨 위로 돌아오면 타이머 재개
             setIsScrolled(false);
           }
         }
       });
 
-      // 텍스트 패럴랙스 (배경 이미지보다 빠르게 위로 올라가는 효과)
+      // 텍스트 패럴랙스
       scrollTl.fromTo(champTextRef.current,
         { y: 0, opacity: 0 },
         { y: -120, opacity: 0.15, duration: 0.4, ease: 'power1.out' },
         0
       );
 
-      // 프로필 컨테이너 페이드인 (선수 사진과 조화롭게 연출)
+      // 프로필 컨테이너 페이드인
       scrollTl.fromTo(profileContainerRef.current,
         { autoAlpha: 0, y: 60 },
         { autoAlpha: 1, y: 0, duration: 0.5, ease: 'power2.out' },
@@ -358,25 +336,64 @@ export default function Hero() {
     return () => {
       ctx.revert();
     };
-  }, [selectedHeroIndex]);
+  }, []); // 의존성 []로 고정하여 챔피언 변경 시 ScrollTrigger 핀 파괴 방지
 
-  const handlePrevHero = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handlePrevHero = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setSelectedHeroIndex((prev) => (prev > 0 ? prev - 1 : heroPlayers.length - 1));
+    setActivePoseIndex(0);
     setTimerKey((k) => k + 1);
   };
 
-  const handleNextHero = (e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleNextHero = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
     setSelectedHeroIndex((prev) => (prev < heroPlayers.length - 1 ? prev + 1 : 0));
+    setActivePoseIndex(0);
     setTimerKey((k) => k + 1);
+  };
+
+  // 모바일 터치 스와이프 제스처 핸들러
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0].clientX;
+    touchStartYRef.current = e.touches[0].clientY;
+    setIsPaused(true);
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    setIsPaused(false);
+    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
+    
+    const deltaX = e.changedTouches[0].clientX - touchStartXRef.current;
+    const deltaY = e.changedTouches[0].clientY - touchStartYRef.current;
+
+    // 수평 스와이프 감지 (최소 50px, 수직 스크롤 오동작 방지)
+    if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
+      if (deltaX < 0) {
+        handleNextHero();
+      } else {
+        handlePrevHero();
+      }
+    }
+
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
   };
 
   return (
     <div className="hero-wrapper">
+      {/* 검색엔진 SEO를 위한 시맨틱 헤딩 */}
+      <h1 className="sr-only">
+        YBBF 용인특례시 보디빌딩대회 공식 웹 플랫폼 — 그랑프리 챔피언스 쇼케이스
+      </h1>
+
       <section
         ref={sectionRef}
-        className="relative h-screen overflow-hidden bg-[#030306]"
+        role="region"
+        aria-roledescription="carousel"
+        aria-label="그랑프리 챔피언 히어로 캐러셀"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className="relative h-screen h-dvh overflow-hidden bg-[#030306]"
         style={{
           '--hero-text': '#ffffff',
           '--hero-muted': 'rgba(255,255,255,0.7)',
@@ -387,7 +404,7 @@ export default function Hero() {
         {/* ═══ LAYER 0: CSS 시네마틱 배경 (선택된 챔피언/포즈 이미지) ═══ */}
         <CSSHero imageUrl={activePhotoUrl} />
 
-        {/* ═══ LAYER 1: 하단 상시 노출 네비게이션 컨트롤러 (모바일 친화적 2단 반응형 레이아웃) ═══ */}
+        {/* ═══ LAYER 1: 하단 상시 노출 네비게이션 컨트롤러 ═══ */}
         <div
           ref={bottomBarRef}
           className="absolute bottom-0 left-0 right-0 pointer-events-none"
@@ -403,12 +420,11 @@ export default function Hero() {
                 onMouseLeave={() => setIsPaused(false)}
                 className="relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-2.5 md:gap-4 pointer-events-auto bg-black/85 backdrop-blur-xl p-3 md:px-5 md:py-2.5 rounded-2xl md:rounded-full border border-white/15 shadow-[0_8px_32px_rgba(0,0,0,0.8)] w-full md:w-auto md:min-w-[620px]"
               >
-                {/* 10초 카운트다운 게이지 바 (스크롤 중에는 멈춤) */}
+                {/* 10초 카운트다운 게이지 바 (GPU 가속 scaleX 애니메이션) */}
                 {isTimerActive && (
                   <div 
                     key={timerKey}
-                    className="absolute bottom-0 left-0 h-[2.5px] bg-[#b4ff00] shadow-[0_0_10px_#b4ff00] animate-[heroProgress_10s_linear_forwards]"
-                    style={{ width: '100%' }}
+                    className="absolute bottom-0 left-0 w-full h-[2.5px] bg-[#b4ff00] shadow-[0_0_10px_#b4ff00] origin-left will-change-transform animate-[heroProgress_10s_linear_forwards]"
                   />
                 )}
 
@@ -431,10 +447,10 @@ export default function Hero() {
 
                   <div className="h-3.5 w-px bg-white/20 shrink-0 hidden md:block" />
 
-                  {/* 선수 이름 & 종목 (모바일에서도 글자 잘림 없이 넉넉하게 표시) */}
+                  {/* 선수 이름 & 종목 */}
                   <div className="flex items-center gap-1.5 truncate">
                     <span className="text-sm md:text-xs font-black text-white tracking-wide shrink-0">
-                      {currentHero.heroName}
+                      {currentHero.heroName || 'YBBF 챔피언'}
                     </span>
                     <span className="text-xs md:text-[11px] text-white/70 truncate font-medium">
                       · {currentHero.heroClass}
@@ -448,48 +464,54 @@ export default function Hero() {
                   {availablePoses.length > 1 && (
                     <div className="flex items-center gap-1 bg-white/10 p-1 rounded-xl md:rounded-full border border-white/15">
                       <button
+                        type="button"
+                        aria-pressed={activePoseIndex === 0}
+                        aria-label="무대 컷 1 포즈 보기"
                         onClick={(e) => { e.stopPropagation(); setActivePoseIndex(0); setTimerKey(k => k + 1); }}
-                        className={`px-3.5 py-1.5 md:px-2.5 md:py-0.5 rounded-lg md:rounded-full text-xs md:text-[10px] font-mono font-bold transition-all active:scale-95 ${
+                        className={`min-h-[36px] px-3.5 py-1.5 md:px-2.5 md:py-0.5 rounded-lg md:rounded-full text-xs md:text-[10px] font-mono font-bold transition-all active:scale-95 ${
                           activePoseIndex === 0 
                             ? 'bg-[#b4ff00] text-black shadow-[0_0_12px_rgba(180,255,0,0.6)] font-black' 
                             : 'text-white/70 hover:text-white'
                         }`}
-                        title="무대 컷 1 (Side/Chest)"
                       >
                         POSE 1
                       </button>
                       <button
+                        type="button"
+                        aria-pressed={activePoseIndex === 1}
+                        aria-label="무대 컷 2 포즈 보기"
                         onClick={(e) => { e.stopPropagation(); setActivePoseIndex(1); setTimerKey(k => k + 1); }}
-                        className={`px-3.5 py-1.5 md:px-2.5 md:py-0.5 rounded-lg md:rounded-full text-xs md:text-[10px] font-mono font-bold transition-all active:scale-95 ${
+                        className={`min-h-[36px] px-3.5 py-1.5 md:px-2.5 md:py-0.5 rounded-lg md:rounded-full text-xs md:text-[10px] font-mono font-bold transition-all active:scale-95 ${
                           activePoseIndex === 1 
                             ? 'bg-[#b4ff00] text-black shadow-[0_0_12px_rgba(180,255,0,0.6)] font-black' 
                             : 'text-white/70 hover:text-white'
                         }`}
-                        title="무대 컷 2 (Biceps/Abs)"
                       >
                         POSE 2
                       </button>
                     </div>
                   )}
 
-                  {/* 이전 / 다음 챔피언 넘김 (모바일 넉넉한 터치 영역) */}
+                  {/* 이전 / 다음 챔피언 넘김 (접근성 및 터치 영역 44px 이상 확보) */}
                   <div className="flex items-center gap-1.5 md:border-l md:border-white/20 md:pl-2">
-                    <span className="text-xs md:text-[10px] font-mono font-bold text-[#b4ff00] px-1 text-center">
-                      {safeIndex + 1}/{heroPlayers.length}
+                    <span className="text-xs md:text-[10px] font-mono font-bold text-[#b4ff00] px-1 text-center" aria-live="polite">
+                      {safeIndex + 1}/{Math.max(1, heroPlayers.length)}
                     </span>
                     <button 
+                      type="button"
+                      aria-label="이전 챔피언"
                       onClick={handlePrevHero} 
-                      className="p-2 md:p-1.5 bg-white/10 hover:bg-white/20 active:scale-90 rounded-full text-white transition-all"
-                      title="이전 챔피언"
+                      className="min-w-[40px] min-h-[40px] flex items-center justify-center p-2 md:p-1.5 bg-white/10 hover:bg-white/20 active:scale-90 rounded-full text-white transition-all"
                     >
-                      <ChevronLeft size={18} className="md:w-4 md:h-4" />
+                      <ChevronLeft size={18} aria-hidden="true" />
                     </button>
                     <button 
+                      type="button"
+                      aria-label="다음 챔피언"
                       onClick={handleNextHero} 
-                      className="p-2 md:p-1.5 bg-white/10 hover:bg-white/20 active:scale-90 rounded-full text-white transition-all"
-                      title="다음 챔피언"
+                      className="min-w-[40px] min-h-[40px] flex items-center justify-center p-2 md:p-1.5 bg-white/10 hover:bg-white/20 active:scale-90 rounded-full text-white transition-all"
                     >
-                      <ChevronRight size={18} className="md:w-4 md:h-4" />
+                      <ChevronRight size={18} aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -498,14 +520,30 @@ export default function Hero() {
 
               {/* SNS 링크 (데스크탑에서만 노출) */}
               <div className="hidden lg:flex items-center gap-5">
-                {['IG', 'YT', 'FB'].map(label => (
-                  <span 
-                    key={label} 
-                    className="text-xs font-mono tracking-widest text-white/50 hover:text-[#b4ff00] transition-colors cursor-pointer pointer-events-auto"
-                  >
-                    {label}
-                  </span>
-                ))}
+                <a 
+                  href="https://www.instagram.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs font-mono tracking-widest text-white/50 hover:text-[#b4ff00] transition-colors pointer-events-auto"
+                >
+                  IG
+                </a>
+                <a 
+                  href="https://www.youtube.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs font-mono tracking-widest text-white/50 hover:text-[#b4ff00] transition-colors pointer-events-auto"
+                >
+                  YT
+                </a>
+                <a 
+                  href="https://www.tiktok.com" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs font-mono tracking-widest text-white/50 hover:text-[#b4ff00] transition-colors pointer-events-auto"
+                >
+                  TT
+                </a>
               </div>
 
             </div>
@@ -515,6 +553,7 @@ export default function Hero() {
         {/* ═══ LAYER 3: "GRAND PRIX" 배경 텍스트 (스크롤 시 등장) ═══ */}
         <div
           ref={champTextRef}
+          aria-hidden="true"
           className="absolute inset-0 flex items-center justify-center px-4 md:px-8 pointer-events-none opacity-0"
           style={{ zIndex: 5 }}
         >
@@ -540,7 +579,7 @@ export default function Hero() {
                 </p>
               </div>
               <h2 className="text-4xl sm:text-5xl md:text-7xl lg:text-8xl font-display font-black italic uppercase tracking-tight text-white leading-[0.88] drop-shadow-[0_4px_16px_rgba(0,0,0,0.95)] drop-shadow-[0_2px_4px_rgba(0,0,0,1)]">
-                {currentHero.heroName.toUpperCase()}
+                {(currentHero.heroName || '').toUpperCase()}
               </h2>
             </div>
 

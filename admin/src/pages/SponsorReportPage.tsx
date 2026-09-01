@@ -151,9 +151,10 @@ export default function SponsorReportPage() {
     setTimeout(() => setCopiedText(false), 2500);
   };
 
-  // 전체 리포트 CSV 일괄 다운로드
+  // 전체 리포트 CSV 일괄 다운로드 (특수문자/따옴표 이스케이핑 적용)
   const handleDownloadAllCsv = () => {
     if (sponsors.length === 0) return;
+    const escapeCsv = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
     const headers = ['스폰서명,등급,상태,노출시간(초),가중치,실측송출횟수,총노출시간(초),전광판송출구역,동영상여부,담당자,전화번호,이메일,주소,홈페이지'];
     const rows = sponsors.map(s => {
       const scenes = (s.targetScenes || []).join('|');
@@ -161,7 +162,22 @@ export default function SponsorReportPage() {
       const count = calculateExposureCount(s);
       const dur = Number(s.durationSeconds || 5);
       const totalSec = count * dur;
-      return `"${s.name}","${s.tag || 'OFFICIAL'}","${s.status || 'active'}","${dur}","${s.weight || 1}","${count}","${totalSec}","${scenes}","${hasVid}","${s.contactPerson || ''}","${s.phone || ''}","${s.email || ''}","${s.address || ''}","${s.socials?.homepage || s.linkUrl || ''}"`;
+      return [
+        escapeCsv(s.name),
+        escapeCsv(s.tag || 'OFFICIAL'),
+        escapeCsv(s.status || 'active'),
+        dur,
+        s.weight || 1,
+        count,
+        totalSec,
+        escapeCsv(scenes),
+        escapeCsv(hasVid),
+        escapeCsv(s.contactPerson || ''),
+        escapeCsv(s.phone || ''),
+        escapeCsv(s.email || ''),
+        escapeCsv(s.address || ''),
+        escapeCsv(s.socials?.homepage || s.linkUrl || '')
+      ].join(',');
     });
 
     const csvContent = '\uFEFF' + [headers, ...rows].join('\n');
@@ -169,7 +185,7 @@ export default function SponsorReportPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `YBBF_2026_스폰서_광고노출_실측보고서_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `YBBF_스폰서_광고노출_실측보고서_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
   };
 

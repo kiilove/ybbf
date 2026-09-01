@@ -20,6 +20,7 @@ export interface User {
 
 export interface HeroPlayer {
   id: string;
+  orderIndex?: number;
   heroName: string;
   heroClass: string;
   heroHeight: string;
@@ -27,6 +28,12 @@ export interface HeroPlayer {
   heroGym: string;
   heroTitles: string;
   heroImageUrl: string;
+  stagePhoto1?: string;
+  stagePhoto2?: string;
+  isMultiCrown?: boolean;
+  crownCount?: number;
+  crownBadge?: string;
+  classes?: string[];
   heroInstagram: string;
   heroYoutube: string;
   heroFacebook: string;

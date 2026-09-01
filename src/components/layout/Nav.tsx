@@ -77,26 +77,27 @@ export default function Nav() {
         }`}
       >
         <div className="flex-1 flex items-center">
-          <a 
-            href="/" 
+          <Link 
+            to="/" 
             onClick={() => setIsOpen(false)}
             className={`text-display text-[3.5rem] md:text-[6rem] leading-none font-black uppercase tracking-tighter cursor-grow italic transition-colors duration-500 ${
               isAtHeroTop ? 'text-white' : isDarkTheme || isOpen ? 'text-accent drop-shadow-[0_0_20px_rgba(204,255,0,0.3)]' : 'text-black'
             }`}
           >
             YBBF
-          </a>
+          </Link>
         </div>
         <div className={`flex items-center gap-4 sm:gap-6 mt-2 md:mt-0 transition-colors duration-500 ${isDarkTheme || isOpen || scrolled ? 'text-white' : 'text-black'}`}>
           <div className="hidden lg:block text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-right opacity-60 leading-relaxed font-mono">
             용인시 보디빌딩협회<br/>공식 웹사이트
           </div>
-          <a href="/store" className="hidden md:block text-[11px] font-bold uppercase tracking-[0.2em] opacity-80 hover:text-accent transition-colors">스토어</a>
+          <Link to="/store" className="hidden md:block text-[11px] font-bold uppercase tracking-[0.2em] opacity-80 hover:text-accent transition-colors">스토어</Link>
           
           {/* USER INCENTIVE / AUTHENTICATION GATEWAY (Desktop & Mobile Adaptive) */}
           {isAuthenticated ? (
             <div className="relative">
               <button
+                type="button"
                 onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
                 className={`cursor-grow flex items-center gap-1.5 text-[10px] font-black tracking-widest border px-4 py-1.5 rounded-full transition-all duration-200 select-none ${
                   isDarkTheme || isOpen || scrolled
@@ -128,6 +129,7 @@ export default function Nav() {
                       <span>사전계측 제출</span>
                     </Link>
                     <button
+                      type="button"
                       onClick={() => {
                         logout();
                         setIsUserMenuOpen(false);
@@ -142,8 +144,8 @@ export default function Nav() {
               )}
             </div>
           ) : (
-            <a 
-              href="/login"
+            <Link 
+              to="/login"
               className={`cursor-grow flex items-center gap-1.5 border px-3 py-1.5 rounded-full text-[10px] font-black tracking-widest transition-all duration-200 ${
                 isDarkTheme || isOpen || scrolled
                   ? 'border-white/25 hover:bg-accent hover:text-black hover:border-accent text-white' 
@@ -152,7 +154,7 @@ export default function Nav() {
             >
               <LogIn className="w-3.5 h-3.5" />
               <span>로그인</span>
-            </a>
+            </Link>
           )}
 
           <button 
@@ -179,7 +181,7 @@ export default function Nav() {
           <div className="flex justify-between items-center w-full absolute top-0 left-0 px-6 md:px-16 h-20">
             <span className="text-display text-2xl font-black uppercase tracking-tighter text-text-primary">YBBF</span>
             <div className="flex items-center gap-6">
-              <a href="/store" onClick={() => setIsOpen(false)} className="hidden md:block text-[11px] font-bold uppercase tracking-[0.2em] opacity-80 hover:text-accent transition-colors">스토어</a>
+              <Link to="/store" onClick={() => setIsOpen(false)} className="hidden md:block text-[11px] font-bold uppercase tracking-[0.2em] opacity-80 hover:text-accent transition-colors">스토어</Link>
               
               {/* OBLIGATORY SIGN IN AT OVERLAY MENU */}
               {isAuthenticated ? (
@@ -200,6 +202,7 @@ export default function Nav() {
                     <span>사전계측</span>
                   </Link>
                   <button
+                    type="button"
                     onClick={() => {
                       logout();
                       setIsOpen(false);
@@ -211,17 +214,19 @@ export default function Nav() {
                   </button>
                 </div>
               ) : (
-                <a
-                  href="/login"
+                <Link
+                  to="/login"
                   onClick={() => setIsOpen(false)}
                   className="cursor-grow flex items-center gap-1.5 border border-accent hover:bg-accent hover:text-black px-4 py-1.5 rounded-full text-xs font-black tracking-widest text-accent transition-all duration-200"
                 >
                   <LogIn className="w-3.5 h-3.5" />
                   <span>로그인 / 가입</span>
-                </a>
+                </Link>
               )}
 
               <button 
+                type="button"
+                aria-label="메뉴 닫기"
                 onClick={() => setIsOpen(false)}
                 className="cursor-grow group p-2 mx-[-8px]"
               >
@@ -234,14 +239,14 @@ export default function Nav() {
           <div className="flex flex-col gap-2 md:gap-4 mt-12 md:mt-0">
             {menuItems.map((item, i) => (
               <div key={i} className="overflow-hidden">
-                <a
-                  href={item.path}
+                <Link
+                  to={item.path}
                   onClick={() => setIsOpen(false)}
                   className="menu-item block text-display text-[clamp(32px,4vw,64px)] leading-none font-black text-text-primary hover:text-accent hover:translate-x-4 transition-all duration-300"
                   onMouseEnter={() => handleMenuHover(item.image)}
                 >
                   {item.name}
-                </a>
+                </Link>
               </div>
             ))}
           </div>
@@ -254,9 +259,33 @@ export default function Nav() {
               <a href="mailto:contact@ybbf.or.kr" className="hover:text-accent transition-colors">contact@ybbf.or.kr</a>
             </div>
             <div className="flex gap-4">
-              <a href="#" className="p-2 hover:bg-accent hover:text-bg-primary rounded-full transition-colors"><Instagram className="w-5 h-5" /></a>
-              <a href="#" className="p-2 hover:bg-accent hover:text-bg-primary rounded-full transition-colors"><Youtube className="w-5 h-5" /></a>
-              <a href="#" className="p-2 hover:bg-accent hover:text-bg-primary rounded-full transition-colors"><Twitter className="w-5 h-5" /></a>
+              <a 
+                href="https://www.instagram.com" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                aria-label="인스타그램"
+                className="p-2 hover:bg-accent hover:text-bg-primary rounded-full transition-colors"
+              >
+                <Instagram className="w-5 h-5" />
+              </a>
+              <a 
+                href="https://www.youtube.com" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                aria-label="유튜브"
+                className="p-2 hover:bg-accent hover:text-bg-primary rounded-full transition-colors"
+              >
+                <Youtube className="w-5 h-5" />
+              </a>
+              <a 
+                href="https://www.tiktok.com" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                aria-label="틱톡"
+                className="p-2 hover:bg-accent hover:text-bg-primary rounded-full transition-colors"
+              >
+                <Twitter className="w-5 h-5" />
+              </a>
             </div>
           </div>
         </div>

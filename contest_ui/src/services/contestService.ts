@@ -277,7 +277,7 @@ export const contestService = {
 
     // [B] D1 동기화 (기존의 /api/register 또는 PUT API 활용)
     try {
-      await fetch(`${API_BASE_URL}/register`, {
+      const res = await fetch(`${API_BASE_URL}/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -285,8 +285,12 @@ export const contestService = {
         credentials: 'include',
         body: JSON.stringify(finalFirestorePayload)
       });
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => '');
+        console.warn(`[D1 Sync Warning] D1 응답 상태: ${res.status} - ${errorText}`);
+      }
     } catch (d1Err) {
-      console.warn('D1 동기화 경고 (Firestore는 정상 저장됨):', d1Err);
+      console.warn('D1 네트워크 동기화 경고 (Firestore는 정상 저장됨):', d1Err);
     }
   },
 

@@ -47,23 +47,39 @@ export function useSystemSettings() {
     }
   }, []);
 
-  // 선수 추가 헬퍼 함수
+  // 선수 추가 헬퍼 함수 (orderIndex 지정 위치 삽입 지원)
   const addHeroPlayer = useCallback(async (newPlayer: HeroPlayer) => {
     if (!settings) return false;
-    const updatedPlayers = [...(settings.heroPlayers || []), newPlayer];
+    const current = [...(settings.heroPlayers || [])];
+    const targetIdx = (newPlayer.orderIndex && newPlayer.orderIndex >= 1) ? Math.min(newPlayer.orderIndex - 1, current.length) : current.length;
+    current.splice(targetIdx, 0, newPlayer);
+    current.forEach((p, idx) => {
+      p.orderIndex = idx + 1;
+    });
     const newSettings: SystemSettings = {
       ...settings,
-      heroPlayers: updatedPlayers
+      heroPlayers: current
     };
     return await saveSettings(newSettings);
   }, [settings, saveSettings]);
 
-  // 선수 수정 헬퍼 함수
+  // 선수 수정 헬퍼 함수 (orderIndex 변경 시 배열 재배치 지원)
   const updateHeroPlayer = useCallback(async (playerId: string, updatedFields: Partial<HeroPlayer>) => {
     if (!settings) return false;
-    const updatedPlayers = (settings.heroPlayers || []).map(player => 
+    let updatedPlayers = (settings.heroPlayers || []).map(player => 
       player.id === playerId ? { ...player, ...updatedFields } : player
     );
+    if (updatedFields.orderIndex !== undefined && updatedFields.orderIndex >= 1) {
+      const currentIdx = updatedPlayers.findIndex(p => p.id === playerId);
+      if (currentIdx !== -1) {
+        const [target] = updatedPlayers.splice(currentIdx, 1);
+        const targetIdx = Math.min(Math.max(updatedFields.orderIndex - 1, 0), updatedPlayers.length);
+        updatedPlayers.splice(targetIdx, 0, target);
+      }
+    }
+    updatedPlayers.forEach((p, idx) => {
+      p.orderIndex = idx + 1;
+    });
     const newSettings: SystemSettings = {
       ...settings,
       heroPlayers: updatedPlayers

@@ -165,9 +165,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       const data = await adminService.getSettings();
       set({ settings: data, isLoading: false });
     } catch (err: any) {
-      console.warn('설정 조회 실패 (디폴트 설정으로 동작):', err);
-      // API 조회 실패 시에도 기본값(DEFAULT_SETTINGS)을 유지하여 UI가 정상 동작하도록 함
-      set({ settings: DEFAULT_SETTINGS, isLoading: false });
+      console.warn('설정 조회 실패 (기존 설정 유지 또는 기본값 동작):', err);
+      // API 조회 실패 시 이미 메모리에 설정이 있으면 유지하고, 없을 때만 DEFAULT_SETTINGS로 세팅
+      set((state) => ({
+        settings: state.settings || DEFAULT_SETTINGS,
+        isLoading: false,
+        error: err.message || '설정을 불러오지 못했습니다.'
+      }));
     }
   },
 

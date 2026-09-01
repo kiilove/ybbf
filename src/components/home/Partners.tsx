@@ -30,12 +30,18 @@ export default function Partners() {
 
   useEffect(() => {
     if (selectedSponsor) {
+      document.body.style.overflow = 'hidden';
       if (!selectedSponsor.imageUrl && selectedSponsor.videoUrl) {
         setModalMediaType('VIDEO');
       } else {
         setModalMediaType('IMAGE');
       }
+    } else {
+      document.body.style.overflow = '';
     }
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [selectedSponsor]);
 
   const handleRequestNativeFullscreen = () => {
@@ -123,7 +129,10 @@ export default function Partners() {
                   src={sponsor.imageUrl}
                   alt={sponsor.name}
                   className="max-h-10 md:max-h-12 max-w-[140px] md:max-w-[180px] object-contain grayscale opacity-65 group-hover/card:grayscale-0 group-hover/card:opacity-100 transition-all duration-200 pointer-events-none"
-                  loading="eager"
+                  loading="lazy"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
                 />
               ) : (
                 <div className="flex items-center gap-2.5 pointer-events-none">
